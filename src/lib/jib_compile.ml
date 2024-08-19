@@ -318,6 +318,7 @@ module Make (C : CONFIG) = struct
   let append_into_block instrs instr = match instrs with [] -> instr | _ -> iblock (instrs @ [instr])
 
   let rec find_aexp_loc (AE_aux (e, { loc = l; _ })) =
+    Printf.printf "jib_compile::sail_branch_target_taken::find_aexp_loc loc=%s\n" (simple_string_of_loc l);
     match Reporting.simp_loc l with
     | Some _ -> l
     | None -> (
@@ -336,9 +337,12 @@ module Make (C : CONFIG) = struct
         incr coverage_branch_target_count;
         let args = coverage_loc_args (find_aexp_loc aexp) in
         Printf.fprintf out "%s\n" ("T " ^ string_of_int branch_id ^ ", " ^ string_of_int branch_target_id ^ ", " ^ args);
+        Printf.printf "jib_compile::sail_branch_target_taken: (%d, %d, %s)\n" branch_id branch_target_id args;
         [iraw (Printf.sprintf "sail_branch_target_taken(%d, %d, %s);" branch_id branch_target_id args)]
       end
-    | _ -> []
+    | _ ->
+        Printf.printf "%s\n" (Printf.sprintf "sail_branch_target_taken: None\n");
+        []
 
   (* Generate code and static branch info for function entry coverage.
      `id` is the name of the function. *)
@@ -628,6 +632,7 @@ module Make (C : CONFIG) = struct
     | AP_struct (_, typ) -> ctyp_of_typ ctx typ
 
   let rec compile_match ctx (AP_aux (apat_aux, env, l)) cval case_label =
+    Printf.printf "jib_compile::compile_match l=%s\n" (simple_string_of_loc l);
     let ctx = { ctx with local_env = env } in
     let ctyp = cval_ctyp cval in
     match apat_aux with
@@ -760,7 +765,9 @@ module Make (C : CONFIG) = struct
         let setup, cval, cleanup = compile_aval l ctx aval in
         (setup, (fun clexp -> icopy l clexp cval), cleanup)
     (* Compile case statements *)
+    (* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
     | AE_match (aval, cases, typ) ->
+        Printf.printf "job_compile::compile_aexp::AE_match 有 %d 个 case -------------------\n" (List.length cases);
         let ctx = update_coverage_override uannot ctx in
         let ctyp = ctyp_of_typ ctx typ in
         let aval_setup, cval, aval_cleanup = compile_aval l ctx aval in
@@ -771,8 +778,12 @@ module Make (C : CONFIG) = struct
         let case_return_id = ngensym () in
         let finish_match_label = label "finish_match_" in
         let compile_case (apat, guard, body) =
+          Printf.printf "job_compile::compile_case\n";
           let case_label = label "case_" in
-          if is_dead_aexp body then [ilabel case_label]
+          if is_dead_aexp body then (
+            Printf.printf "job_compile::compile_aexp::is_dead_aexp\n";
+            [ilabel case_label]
+          )
           else (
             let trivial_guard =
               match guard with
@@ -781,8 +792,11 @@ module Make (C : CONFIG) = struct
                   true
               | _ -> false
             in
+            Printf.printf "job_compile::compile_aexp::compile_pat: \n";
             let pre_destructure, destructure, destructure_cleanup, ctx = compile_match ctx apat cval case_label in
+            Printf.printf "job_compile::compile_aexp::compile_guard \n";
             let guard_setup, guard_call, guard_cleanup = compile_aexp ctx guard in
+            Printf.printf "job_compile::compile_aexp::compile_body \n";
             let body_setup, body_call, body_cleanup = compile_aexp ctx body in
             let gs = ngensym () in
             let case_instrs =
@@ -796,12 +810,18 @@ module Make (C : CONFIG) = struct
                       ]
                   else []
                 )
-              @ (if num_cases > 1 then coverage_branch_target_taken ctx branch_id body else [])
+              @ ( if num_cases > 1 then (
+                    Printf.printf "job_compile::compile_aexp::case_label: %s\n" case_label;
+                    coverage_branch_target_taken ctx branch_id body
+                  )
+                  else []
+                )
               @ body_setup
               @ [body_call (CL_id (case_return_id, ctyp))]
               @ body_cleanup @ destructure_cleanup
               @ [igoto finish_match_label]
             in
+            Printf.printf "\n";
             [iblock case_instrs; ilabel case_label]
           )
         in
@@ -1301,6 +1321,7 @@ module Make (C : CONFIG) = struct
         (gs, (pre_destructure @ destructure, cleanup))
 
   let rec compile_arg_pats ctx label (P_aux (p_aux, (l, _)) as pat) ctyps =
+    Printf.printf "jib_compile::compile_arg_pats loc=%s\n" (simple_string_of_loc l);
     match p_aux with
     | P_typ (_, pat) -> compile_arg_pats ctx label pat ctyps
     | P_tuple pats when List.length pats = List.length ctyps ->
@@ -1466,8 +1487,14 @@ module Make (C : CONFIG) = struct
     in
 
     (* Optimize and compile the expression to ANF. *)
+    (* 把原始数据转为 AE_xxx *)
     let aexp = C.optimize_anf ctx (no_shadow (IdSet.union known_ids !guard_bindings) (anf exp)) in
 
+    Printf.printf "------------------------ ANF start ------------------------\n";
+    prerr_endline Util.("ANF for " ^ string_of_id id ^ ":" |> yellow |> bold |> clear);
+    prerr_endline (Document.to_string (pp_aexp aexp));
+
+    Printf.printf "------------------------ ANF done  ------------------------\n";
     if Option.is_some debug_attr then (
       prerr_endline Util.("ANF for " ^ string_of_id id ^ ":" |> yellow |> bold |> clear);
       prerr_endline (Document.to_string (pp_aexp aexp))
@@ -1552,15 +1579,19 @@ module Make (C : CONFIG) = struct
           { ctx with valspecs = Bindings.add id (extern, arg_ctyps, ret_ctyp) ctx.valspecs }
         )
     | DEF_fundef (FD_aux (FD_function (_, _, [FCL_aux (FCL_funcl (id, Pat_aux (Pat_exp (pat, exp), _)), _)]), _)) ->
+        Printf.printf "------------------------ ANF done3 ------------------------\n";
         Util.progress "Compiling " (string_of_id id) n total;
         compile_funcl ctx def_annot id pat None exp
     | DEF_fundef (FD_aux (FD_function (_, _, [FCL_aux (FCL_funcl (id, Pat_aux (Pat_when (pat, guard, exp), _)), _)]), _))
       ->
+        Printf.printf "------------------------ ANF done4 ------------------------\n";
         Util.progress "Compiling " (string_of_id id) n total;
         compile_funcl ctx def_annot id pat (Some guard) exp
     | DEF_fundef (FD_aux (FD_function (_, _, []), (l, _))) ->
+        Printf.printf "------------------------ ANF done1 ------------------------\n";
         raise (Reporting.err_general l "Encountered function with no clauses")
     | DEF_fundef (FD_aux (FD_function (_, _, _ :: _ :: _), (l, _))) ->
+        Printf.printf "------------------------ ANF done2 ------------------------\n";
         raise (Reporting.err_general l "Encountered function with multiple clauses")
     (* All abbreviations should expanded by the typechecker, so we don't
        need to translate type abbreviations into C typedefs. *)

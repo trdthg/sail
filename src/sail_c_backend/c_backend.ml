@@ -2083,6 +2083,8 @@ let jib_of_ast env effect_info ast =
 
 let compile_ast env effect_info output_chan c_includes ast =
   try
+    
+    (* 1. ast -> jib *)
     let cdefs, ctx = jib_of_ast env effect_info ast in
     (* let cdefs', _ = Jib_optimize.remove_tuples cdefs ctx in *)
     let cdefs = insert_heap_returns Bindings.empty cdefs in
@@ -2090,6 +2092,7 @@ let compile_ast env effect_info output_chan c_includes ast =
     let recursive_functions = get_recursive_functions cdefs in
     let cdefs = optimize recursive_functions cdefs in
 
+    (* 2. code-gen *)
     let docs = separate_map (hardline ^^ hardline) (codegen_def ctx) cdefs in
 
     let coverage_include =

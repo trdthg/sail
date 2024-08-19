@@ -1944,7 +1944,13 @@ let strip_lexp lexp = map_lexp_annot (fun (l, tannot) -> (l, untyped_annot tanno
 let strip_letbind lb = map_letbind_annot (fun (l, tannot) -> (l, untyped_annot tannot)) lb
 let strip_mpat mpat = map_mpat_annot (fun (l, tannot) -> (l, untyped_annot tannot)) mpat
 let strip_mpexp mpexp = map_mpexp_annot (fun (l, tannot) -> (l, untyped_annot tannot)) mpexp
-let strip_mapcl mapcl = map_mapcl_annot (fun (l, tannot) -> (l, untyped_annot tannot)) mapcl
+let strip_mapcl mapcl =
+  map_mapcl_annot
+    (fun (l, tannot) ->
+      Printf.printf "rewrites::realize_mapdef::strip_mapcl loc=%s\n" (simple_string_of_loc l);
+      (l, untyped_annot tannot)
+    )
+    mapcl
 let strip_funcl funcl = map_funcl_annot (fun (l, tannot) -> (l, untyped_annot tannot)) funcl
 let strip_val_spec vs = map_valspec_annot (fun (l, tannot) -> (l, untyped_annot tannot)) vs
 let strip_register r = map_register_annot (fun (l, tannot) -> (l, untyped_annot tannot)) r

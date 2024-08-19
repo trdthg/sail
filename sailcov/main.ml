@@ -558,6 +558,7 @@ let main () =
                   done
                 )
                 else if loc.badness > 0 then (
+                  (*  *)
                   warn_assert __LOC__ (loc.goodness <= 0);
                   current_badness := !current_badness + loc.badness;
                   for _ = 1 to loc.badness do
@@ -581,6 +582,7 @@ let main () =
                   output_string chan "</span>"
                 );
 
+                (*  *)
                 warn_assert __LOC__ (!current_goodness >= 0);
                 warn_assert __LOC__ (!current_badness >= 0)
               )

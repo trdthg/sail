@@ -3187,6 +3187,7 @@ let merge_funcls env ast =
   { ast with defs = List.map merge_in_def ast.defs }
 
 let rec exp_of_mpat (MP_aux (mpat, (l, annot))) =
+  Printf.printf "rewrites::exp_of_mpat loc=%s\n" (simple_string_of_loc l);
   let empty_vec = E_aux (E_vector [], (l, empty_uannot)) in
   let concat_vectors vec1 vec2 = E_aux (E_vector_append (vec1, vec2), (l, empty_uannot)) in
   let empty_string = E_aux (E_lit (L_aux (L_string "", Parse_ast.Unknown)), (l, empty_uannot)) in
@@ -3224,6 +3225,7 @@ let rec exp_of_mpat (MP_aux (mpat, (l, annot))) =
             ),
           (l, annot)
         )
+(* E_aux 的 location 掉了 *)
 (* TODO FIXME location information? *)
 
 let rewrite_ast_realize_mappings effect_info env ast =
@@ -3236,14 +3238,19 @@ let rewrite_ast_realize_mappings effect_info env ast =
       | MPat_aux (MPat_when (mpat, _), _) -> exp_of_mpat mpat
     in
     match mpexp_pat with
-    | MPat_aux (MPat_pat mpat, annot) -> Pat_aux (Pat_exp (pat_of_mpat mpat, exp), annot)
-    | MPat_aux (MPat_when (mpat, guard), annot) -> Pat_aux (Pat_when (pat_of_mpat mpat, guard, exp), annot)
+    | MPat_aux (MPat_pat mpat, annot) ->
+        Printf.printf "rewrite_ast_realize_mappings构建 Pat forward=%b pat=%s\n" forwards (string_of_mpat mpat);
+        Pat_aux (Pat_exp (pat_of_mpat mpat, exp), annot)
+    | MPat_aux (MPat_when (mpat, guard), annot) ->
+        Printf.printf "rewrite_ast_realize_mappings构建 When forward=%b pat=%s\n" forwards (string_of_mpat mpat);
+        Pat_aux (Pat_when (pat_of_mpat mpat, guard, exp), annot)
   in
   let true_pexp = function
     | Pat_aux (Pat_exp (pat, _), annot) -> Pat_aux (Pat_exp (pat, mk_lit_exp L_true), annot)
     | Pat_aux (Pat_when (pat, guard, _), annot) -> Pat_aux (Pat_when (pat, guard, mk_lit_exp L_true), annot)
   in
   let realize_mapcl forwards id mapcl =
+    Printf.printf "---  \nrealize_mapcl\n";
     match mapcl with
     | MCL_aux (MCL_bidir (mpexp1, mpexp2), _) -> [realize_mpexps forwards mpexp1 mpexp2]
     | MCL_aux (MCL_forwards pexp, _) -> if forwards then [pexp] else []
@@ -3297,7 +3304,10 @@ let rewrite_ast_realize_mappings effect_info env ast =
         forwards_spec @ backwards_spec @ forwards_matches_spec @ backwards_matches_spec
     | vs -> [DEF_aux (DEF_val vs, def_annot)]
   in
+  (* This is the map_to_func place *)
   let realize_mapdef def_annot (MD_aux (MD_mapping (id, _, mapcls), (l, (tannot : tannot)))) =
+    (* where is E_aux constructured *)
+    Printf.printf "\nrewrites::realize_mapdef id=%s loc=%s \n" (string_of_id id) (simple_string_of_loc l);
     let forwards_id = mk_id (string_of_id id ^ "_forwards") in
     let forwards_matches_id = mk_id (string_of_id id ^ "_forwards_matches") in
     let backwards_id = mk_id (string_of_id id ^ "_backwards") in
@@ -3325,7 +3335,15 @@ let rewrite_ast_realize_mappings effect_info env ast =
     let forwards_match =
       mk_exp
         (E_match
-           (arg_exp, List.map (fun mapcl -> strip_mapcl mapcl |> realize_mapcl true forwards_id) mapcls |> List.flatten)
+           ( arg_exp,
+             List.map
+               (fun mapcl ->
+                 Printf.printf "\n------ strip_mapcl\n";
+                 strip_mapcl mapcl |> realize_mapcl true forwards_id
+               )
+               mapcls
+             |> List.flatten
+           )
         )
     in
     let backwards_match =
@@ -4546,6 +4564,7 @@ let instantiate_rewrites rws =
 let opt_ddump_rewrite_ast = ref None
 
 let rewrite_step n total (ctx, ast, effect_info, env) (name, rewriter) =
+  Printf.printf "rewriter::rewrite_step name=%s\n" name;
   let t = Profile.start () in
   let ctx, ast, effect_info, env = rewriter ctx effect_info env ast in
   Profile.finish ("rewrite " ^ name) t;
@@ -4562,10 +4581,14 @@ let rewrite_step n total (ctx, ast, effect_info, env) (name, rewriter) =
   end;
   Util.progress "Rewrite " name n total;
 
+  Printf.printf "----------------- rewriter::rewrite_step::done name=%s -----------------\n" name;
+
+  (* Pretty_print_sail.output_ast stdout (Type_check.strip_ast ast); *)
   (ctx, ast, effect_info, env)
 
 let rewrite ctx effect_info env rewriters ast =
   let total = List.length rewriters in
+  Printf.printf "rewriters total %d\n" total;
   try
     snd
       (List.fold_left

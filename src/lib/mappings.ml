@@ -115,9 +115,11 @@ let remove_direction_attrs map_uannot (P_aux (aux, (l, annot))) =
 let rec extract_mapping_pats map_uannot is_mapping subst (P_aux (aux, annot)) =
   match aux with
   | P_app (mapping, pats) when is_mapping mapping ->
+      (* App 嵌套 mapping 处理 *)
       let id = subst () in
       (remove_direction_attrs map_uannot (P_aux (P_id id, annot)), [(id, P_aux (P_app (mapping, pats), annot))])
   | P_app (f, pats) ->
+      (* 处理各 case 分支? *)
       let pats, found_mapping = extract_mapping_pats_list map_uannot is_mapping subst pats in
       (P_aux (P_app (f, pats), annot), found_mapping)
   | P_tuple pats ->
@@ -175,11 +177,17 @@ and extract_mapping_pats_pair map_uannot is_mapping subst f pat1 pat2 =
    we find any mapping patterns. *)
 let rec split_arms map_uannot is_mapping subst prev_arms = function
   | (Pat_aux (Pat_exp (pat, exp), annot) as arm) :: arms -> begin
+      Printf.printf "split_arms::exp_pat pat=%s \n" (string_of_pat pat);
       match extract_mapping_pats map_uannot is_mapping subst pat with
-      | _, [] -> split_arms map_uannot is_mapping subst (arm :: prev_arms) arms
-      | pat, mappings -> (List.rev prev_arms, Some (Pat_aux (Pat_exp (pat, exp), annot), mappings, arms))
+      | _, [] ->
+          Printf.printf "split_arms::rec\n";
+          split_arms map_uannot is_mapping subst (arm :: prev_arms) arms
+      | pat, mappings ->
+          Printf.printf "split_arms::end\n";
+          (List.rev prev_arms, Some (Pat_aux (Pat_exp (pat, exp), annot), mappings, arms))
     end
   | (Pat_aux (Pat_when (pat, guard, exp), annot) as arm) :: arms -> begin
+      Printf.printf "split_arms when_pat: %s\n" (string_of_pat pat);
       match extract_mapping_pats map_uannot is_mapping subst pat with
       | _, [] -> split_arms map_uannot is_mapping subst (arm :: prev_arms) arms
       | pat, mappings -> (List.rev prev_arms, Some (Pat_aux (Pat_when (pat, guard, exp), annot), mappings, arms))
@@ -197,10 +205,17 @@ let name_gen prefix =
   fresh
 
 (* Take a arm like "<pat> => <exp>" and turn it into "<pat> => Some(<exp>)" *)
+(* let some_arm = function
+   | Pat_aux (Pat_exp (pat, exp), ((l, _) as annot)) ->
+       Pat_aux (Pat_exp (pat, mk_exp ~loc:l (E_app (mk_id ~loc:l "Some", [exp]))), annot)
+   | Pat_aux (Pat_when (pat, guard, exp), ((l, _) as annot)) ->
+       Pat_aux (Pat_when (pat, guard, mk_exp ~loc:l (E_app (mk_id ~loc:l "Some", [exp]))), annot) *)
+
 let some_arm = function
-  | Pat_aux (Pat_exp (pat, exp), annot) -> Pat_aux (Pat_exp (pat, mk_exp (E_app (mk_id "Some", [exp]))), annot)
-  | Pat_aux (Pat_when (pat, guard, exp), annot) ->
-      Pat_aux (Pat_when (pat, guard, mk_exp (E_app (mk_id "Some", [exp]))), annot)
+  | Pat_aux (Pat_exp (pat, exp), ((l, _) as annot)) ->
+      Pat_aux (Pat_exp (pat, mk_exp ~loc:l (E_app (mk_id ~loc:l "Some", [exp]))), annot)
+  | Pat_aux (Pat_when (pat, guard, exp), ((l, _) as annot)) ->
+      Pat_aux (Pat_when (pat, guard, mk_exp ~loc:l (E_app (mk_id ~loc:l "Some", [exp]))), annot)
 
 let wildcard_none = mk_pexp (Pat_exp (mk_pat P_wild, mk_exp (E_app (mk_id "None", [mk_lit_exp L_unit]))))
 
@@ -258,10 +273,16 @@ let tuple_exp = function [exp] -> exp | exps -> mk_exp (E_tuple exps)
 
 let tuple_pat = function [pat] -> pat | pats -> mk_pat (P_tuple pats)
 
+open Ast_util
+
 let rec mappings_match is_mapping subst mappings pexp =
   let handle_mapping (subst_id, P_aux (aux, (l, uannot))) =
+    Printf.printf "mappings_match mappings LOC %s\n" (simple_string_of_loc l);
+    Printf.printf "test entry_point %s\n" (simple_string_of_loc l);
+
     match aux with
     | P_app (mapping, [subpat]) ->
+        Printf.printf "jin4 lai2 le4 ma %s\n" (simple_string_of_loc l);
         let direction = mapping_direction l uannot in
         let mapping_fun_id = mapping_function mapping direction in
         let mapping_guard_id = mapping_guard mapping direction in
@@ -289,19 +310,30 @@ let rec mappings_match is_mapping subst mappings pexp =
 
 and rewrite_arms is_mapping subst msa (l, uannot) =
   let head_exp_tmp = mk_id "head_exp#" in
+  (* App form pat *)
+  Printf.printf "Mapping::rewrite_arms: head_exp=%s match_id=%s after_arms_len=%d loc=%s\n "
+    (string_of_exp msa.head_exp) (string_of_id head_exp_tmp) (List.length msa.after_arms) (simple_string_of_loc l);
+
+  (* 1. sub mapping arm *)
   let mmatch = mappings_match is_mapping subst msa.mappings msa.subst_arm in
+
+  (* 2. before_arms *)
   let new_head_exp =
     mk_exp (E_match (mk_exp (E_id head_exp_tmp), List.map some_arm msa.before_arms @ [mmatch; wildcard_none]))
     |> match_complete
   in
+  (* 3. after_arms *)
   let outer_match =
     match msa.after_arms with
     | [] ->
+        Printf.printf "Mapping::rewrite_arms::outer_match no_after_arm\n";
         E_aux (E_match (new_head_exp, [unwrap_some]), (l, add_attribute Parse_ast.Unknown "mapping_match" None uannot))
         |> match_incomplete
-    | _ ->
+    | Pat_aux (_, (l, _)) :: _ ->
+        Printf.printf "Mapping::rewrite_arms::outer_match has_after_arm\n";
         let after_match =
           rewrite_match_untyped is_mapping subst (mk_exp (E_id head_exp_tmp)) msa.after_arms (l, uannot)
+          (* rewrite_match_untyped is_mapping subst (mk_exp ~loc:l (E_id head_exp_tmp)) msa.after_arms (l, uannot) *)
         in
         E_aux
           ( E_match (new_head_exp, [unwrap_some; none_pexp after_match]),
@@ -309,18 +341,26 @@ and rewrite_arms is_mapping subst msa (l, uannot) =
           )
         |> match_complete
   in
+  Printf.printf "Mapping::rewrite_arms::outer_match done\n";
   mk_exp (E_let (mk_letbind (mk_pat (P_id head_exp_tmp)) msa.head_exp, outer_match))
 
 and rewrite_match_untyped is_mapping subst head_exp arms (l, (uannot : uannot)) =
+  Printf.printf "Mapping::rewrite_match_untyped\n";
   match split_arms (fun x -> x) is_mapping subst [] arms with
   | before_arms, Some (subst_arm, mappings, after_arms) ->
       rewrite_arms is_mapping subst { head_exp; before_arms; subst_arm; mappings; after_arms } (l, uannot)
   | _, None -> E_aux (E_match (head_exp, arms), (l, uannot))
 
-and rewrite_match_typed is_mapping subst head_exp arms (l, (tannot : tannot)) =
+and rewrite_match_typed ?(toplevel = false) is_mapping subst head_exp arms (l, (tannot : tannot)) =
+  Printf.printf "Mapping::rewrite_match_typed top_level=%s loc=%s\n"
+    (if toplevel then "toplevel" else "")
+    (simple_string_of_loc l);
   match split_arms map_uannot is_mapping subst [] arms with
   | before_arms, Some (subst_arm, mappings, after_arms) ->
       let rewritten_match =
+        (*
+          before_arms: 0x00, 0x01,
+          nested_mapping *)
         rewrite_arms is_mapping subst
           (strip_mapping_split_arms { head_exp; before_arms; subst_arm; mappings; after_arms })
           (l, untyped_annot tannot)
@@ -331,11 +371,13 @@ and rewrite_match_typed is_mapping subst head_exp arms (l, (tannot : tannot)) =
 let rewrite_exp (aux, annot) =
   match aux with
   | E_match (head_exp, arms) ->
+      Printf.printf "Mapping::rewrite_exp -------------------\n";
       let fresh = name_gen "mapping" in
-      rewrite_match_typed (fun m -> Env.is_mapping m (env_of_annot annot)) fresh head_exp arms annot
+      rewrite_match_typed ~toplevel:true (fun m -> Env.is_mapping m (env_of_annot annot)) fresh head_exp arms annot
   | _ -> E_aux (aux, annot)
 
 let rewrite_ast ast =
+  Printf.printf "Mapping::rewrite_ast !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n";
   (* Before doing the mapping rewrite we add constant-width bitvector
      type annotations to any mappings, so we can guarantee the
      end-result of the rewrite is type checkable. *)
@@ -354,6 +396,10 @@ let rewrite_ast ast =
     | _ -> P_aux (aux, annot)
   in
   let pat_alg = { id_pat_alg with p_aux = add_mapping_bitvector_types } in
+  Printf.printf "Mapping::rewrite_ast::add_mapping_bitvector_types !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n";
   let ast = rewrite_ast_base { rewriters_base with rewrite_pat = (fun _ -> fold_pat pat_alg) } ast in
   let alg = { id_exp_alg with e_aux = rewrite_exp } in
-  rewrite_ast_base { rewriters_base with rewrite_exp = (fun _ -> fold_exp alg) } ast
+  Printf.printf "Mapping::rewrite_ast::rewrite_exp !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n";
+  let res = rewrite_ast_base { rewriters_base with rewrite_exp = (fun _ -> fold_exp alg) } ast in
+  Printf.printf "Mapping::rewrite_ast !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n";
+  res

@@ -1,0 +1,27 @@
+$[complete]
+function encdec_forwards arg# = let head_exp# = arg# in
+  $[complete] $[mapping_match] match $[complete] match head_exp# {
+    v__0 if and_bool(
+		let mapping0# : bitvector(1) =
+		$[overloaded { "name" = "vector_subrange", "is_infix" = false }] subrange_bits(v__0, 0, 0)
+		in
+		bool_not_bits_backwards_matches(mapping0#), 
+		$[overloaded { "name" = "==", "is_infix" = true }] 
+		eq_bits(
+			$[overloaded { "name" = "vector_subrange", "is_infix" = false }] 
+			subrange_bits(v__0, 1, 1), [bitone])
+		) => 
+			let mapping0# : bitvector(1) =
+			$[overloaded { "name" = "vector_subrange", "is_infix" = false }] subrange_bits(v__0, 0, 0)
+			in
+			$[complete] match bool_not_bits_backwards(mapping0#) {
+				s => Some(B(s)),
+				_ => None()
+			},
+	_ => None()
+  } {
+    Some(result) => result,
+    None(_) => $[incomplete] match head_exp# {
+      b__0 if $[overloaded { "name" = "==", "is_infix" = true }] eq_bits(b__0, [bitzero, bitzero]) => Z()
+    }
+  }

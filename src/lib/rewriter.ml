@@ -175,7 +175,9 @@ let rewrite_pexp rewriters =
   | Pat_aux (Pat_when (p, e, e'), pannot) ->
       Pat_aux (Pat_when (rewriters.rewrite_pat rewriters p, rewrite e, rewrite e'), pannot)
 
-let rewrite_pat rewriters (P_aux (pat, (l, annot))) =
+(* rewrite pat *)
+let rewrite_pat rewriters (P_aux (pat, (l, annot)) as patt) =
+  Printf.printf "rewriter::rewrite_pat(default_rule) pat=%s loc=%s\n" (string_of_pat patt) (simple_string_of_loc l);
   let rewrap p = P_aux (p, (l, annot)) in
   let rewrite = rewriters.rewrite_pat rewriters in
   match pat with
@@ -232,7 +234,9 @@ let rewrite_exp rewriters (E_aux (exp, (l, annot))) =
            )
         )
   | E_field (exp, id) -> rewrap (E_field (rewrite exp, id))
-  | E_match (exp, pexps) -> rewrap (E_match (rewrite exp, List.map (rewrite_pexp rewriters) pexps))
+  | E_match (exp, pexps) ->
+      Printf.printf "rewriter::rewrite_exp::E_match loc=%s\n" (simple_string_of_loc l);
+      rewrap (E_match (rewrite exp, List.map (rewrite_pexp rewriters) pexps))
   | E_try (exp, pexps) -> rewrap (E_try (rewrite exp, List.map (rewrite_pexp rewriters) pexps))
   | E_let (letbind, body) -> rewrap (E_let (rewriters.rewrite_let rewriters letbind, rewrite body))
   | E_assign (lexp, exp) -> rewrap (E_assign (rewriters.rewrite_lexp rewriters lexp, rewrite exp))
@@ -311,6 +315,7 @@ let rewrite_mapcl rewriters (MCL_aux (aux, def_annot)) =
   MCL_aux (aux, def_annot)
 
 let rewrite_mapdef rewriters (MD_aux (MD_mapping (id, tannot_opt, mapcls), annot)) =
+  Printf.printf "rewriter::rewrite_mapdef \n";
   MD_aux (MD_mapping (id, tannot_opt, List.map (rewrite_mapcl rewriters) mapcls), annot)
 
 let rewrite_scattered rewriters (SD_aux (sd, (l, annot))) =
@@ -410,8 +415,15 @@ let rec fold_pat_aux (alg : ('a, 'pat, 'pat_aux) pat_alg) : 'a pat_aux -> 'pat_a
   | P_string_append ps -> alg.p_string_append (List.map (fold_pat alg) ps)
   | P_struct (fpats, fwild) -> alg.p_struct (List.map (fun (field, pat) -> (field, fold_pat alg pat)) fpats, fwild)
 
+(* let rewrite_pat rewriters (P_aux (pat, (l, annot)) as patt) =
+   Printf.printf "rewriter::rewrite_pat(default_rule) pat=%s loc=%s\n" (string_of_pat patt) (simple_string_of_loc l);
+   let rewrap p = P_aux (p, (l, annot)) in
+   let rewrite = rewriters.rewrite_pat rewriters *)
+
 and fold_pat (alg : ('a, 'pat, 'pat_aux) pat_alg) : 'a pat -> 'pat = function
-  | P_aux (pat, annot) -> alg.p_aux (fold_pat_aux alg pat, annot)
+  | P_aux (pat, (l, annot)) as patt ->
+      Printf.printf "rewriter::rewrite_pat(rewrite_rule) pat=%s loc=%s\n" (string_of_pat patt) (simple_string_of_loc l);
+      alg.p_aux (fold_pat_aux alg pat, (l, annot))
 
 let rec fold_mpat_aux (alg : ('a, 'mpat, 'mpat_aux) pat_alg) : 'a mpat_aux -> 'mpat_aux = function
   | MP_lit lit -> alg.p_lit lit

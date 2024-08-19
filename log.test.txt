@@ -1,0 +1,368 @@
+Sail is /home/trdthg/repo/sail/sail
+Sail dir is /home/trdthg/repo/sail
+------------------------
+Testing passing programs
+------------------------
+Running 16 tests in parallel. Set TEST_PAR to configure
+default_order.sail ..................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+deinfix_plus.sail ...................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+add_vec_exts_no_annot.sail ............. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+bitwise_not_gen.sail ................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+real.sail .............................. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+function_namespace.sail ................ [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+vector_append.sail ..................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+overload_overload.sail ................. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+floor_pow2.sail ........................ [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+funcl_guard.sail ....................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+vector_concat_assign.sail .............. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+exist_synonym.sail ..................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+exist2.sail ............................ [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+lexp_vec.sail .......................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+implicits.sail ......................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+vector_subrange_pattern.sail ........... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+while_PM.sail .......................... [92mok[0m
+varity.sail ............................ [92mok[0m
+as_pattern.sail ........................ [92mok[0m
+vec_pat1.sail .......................... [92mok[0m
+while_PP.sail .......................... [92mok[0m
+atomcase.sail .......................... [92mok[0m
+vector_subrange_gen.sail ............... [92mok[0m
+repeat_constraint.sail ................. [92mok[0m
+vec_length_inc.sail .................... [92mok[0m
+equation_return.sail ................... [92mok[0m
+true_false.sail ........................ [92mok[0m
+wildcard_mapping.sail .................. [92mok[0m
+nlflow.sail ............................ [92mok[0m
+tuple_bitvector_int_pat.sail ........... [92mok[0m
+existential_ast.sail ................... [92mok[0m
+existential_ast3.sail .................. [92mok[0m
+exit2.sail ............................. [92mok[0m
+add_real.sail .......................... [92mok[0m
+arm_FPEXC1.sail ........................ [92mok[0m
+commentfix.sail ........................ [92mok[0m
+extension_constructor.sail ............. [92mok[0m
+return_simple4.sail .................... [92mok[0m
+sizeof_fixed.sail ...................... [92mok[0m
+bool_mapping.sail ...................... [92mok[0m
+tautology.sail ......................... [92mok[0m
+multiple_unifiers.sail ................. [92mok[0m
+constraint_syn.sail .................... [92mok[0m
+constraint_ctor.sail ................... [92mok[0m
+flow_lteq1.sail ........................ [92mok[0m
+Replicate.sail ......................... [92mok[0m
+arm_types.sail ......................... [92mok[0m
+concurrency_interface_inc.sail ......... [92mok[0m
+nzcv.sail .............................. [92mok[0m
+exit3.sail ............................. [92mok[0m
+pat_completeness.sail .................. [92mok[0m
+patternrefinement.sail ................. [92mok[0m
+bind_typ_var.sail ...................... [92mok[0m
+custom_flow.sail ....................... [92mok[0m
+bool_bits_mapping.sail ................. [92mok[0m
+decode_patterns.sail ................... [92mok[0m
+struct_field_constraint.sail ........... [92mok[0m
+bool_mapping2.sail ..................... [92mok[0m
+execute_decode_hard.sail ............... [92mok[0m
+overload_int_nat.sail .................. [92mok[0m
+poly_list.sail ......................... [92mok[0m
+vector_pattern_split.sail .............. [92mok[0m
+string_append_non_exec.sail ............ [92mok[0m
+wf_specs.sail .......................... [92mok[0m
+cons_pattern.sail ...................... [92mok[0m
+list_cons2.sail ........................ [92mok[0m
+if_var_updates.sail .................... [92mok[0m
+return_simple1.sail .................... [92mok[0m
+option_tuple.sail ...................... [92mok[0m
+list_lit.sail .......................... [92mok[0m
+complex_exist_sat.sail ................. [92mok[0m
+vector_subrange_mapping.sail ........... [92mok[0m
+type_if_then_else.sail ................. [92mok[0m
+complete_pattern_let.sail .............. [92mok[0m
+exist1.sail ............................ [92mok[0m
+allpats.sail ........................... [92mok[0m
+fpthreesimp.sail ....................... [92mok[0m
+tuple_assign.sail ...................... [92mok[0m
+ex_vector_infer.sail ................... [92mok[0m
+short_circuit_bool_ex.sail ............. [92mok[0m
+bitwise_not.sail ....................... [92mok[0m
+union_infer.sail ....................... [92mok[0m
+procstate1.sail ........................ [92mok[0m
+anon_rec.sail .......................... [92mok[0m
+mod_var.sail ........................... [92mok[0m
+option_either.sail ..................... [92mok[0m
+reg_mod.sail ........................... [92mok[0m
+simple_record_access.sail .............. [92mok[0m
+nonexistent_pragma.sail ................ [92mok[0m
+add_vec_lit.sail ....................... [92mok[0m
+abstract_bool2.sail .................... [92mok[0m
+set_constraint.sail .................... [92mok[0m
+type_div.sail .......................... [92mok[0m
+bitfield_updates0.sail ................. [92mok[0m
+global_type_var.sail ................... [92mok[0m
+pow_32_64.sail ......................... [92mok[0m
+assignment_simple.sail ................. [92mok[0m
+reg_list.sail .......................... [92mok[0m
+while_MP.sail .......................... [92mok[0m
+case_simple2.sail ...................... [92mok[0m
+exist_true.sail ........................ [92mok[0m
+equation_arguments.sail ................ [92mok[0m
+pow_unify.sail ......................... [92mok[0m
+abstract_bool.sail ..................... [92mok[0m
+pure_let_var2.sail ..................... [92mok[0m
+tuple_fun.sail ......................... [92mok[0m
+pure_let_var.sail ...................... [92mok[0m
+flow_gteq1.sail ........................ [92mok[0m
+mutrec.sail ............................ [92mok[0m
+poly_vector.sail ....................... [92mok[0m
+if_infer.sail .......................... [92mok[0m
+exist_tlb.sail ......................... [92mok[0m
+cons_pattern_synonym.sail .............. [92mok[0m
+overlap_field.sail ..................... [92mok[0m
+reg_ref.sail ........................... [92mok[0m
+let_subtyp_bug.sail .................... [92mok[0m
+reg_option.sail ........................ [92mok[0m
+pure_record2.sail ...................... [92mok[0m
+phantom_bitlist_struct.sail ............ [92mok[0m
+type_pow_zero.sail ..................... [93mskip[0m
+inc_prelude.sail ....................... [92mok[0m
+bitfield_mod.sail ...................... [92mok[0m
+type_pow_zero.sail ..................... [93mskip[0m
+bitfield_abs.sail ...................... [92mok[0m
+tuple_bitvector_int_pat3.sail .......... [92mok[0m
+tuple_bitvector_int_pat2.sail .......... [92mok[0m
+type_pow_zero.sail ..................... [93mskip[0m
+mapping_clause.sail .................... [92mok[0m
+bool_typ_pat.sail ...................... [92mok[0m
+enum_map.sail .......................... [92mok[0m
+type_pow_zero.sail ..................... [93mskip[0m
+pure_record.sail ....................... [92mok[0m
+issue250.sail .......................... [92mok[0m
+simple_scattered.sail .................. [92mok[0m
+exit1.sail ............................. [92mok[0m
+existential_constraint_synonym.sail .... [92mok[0m
+plus_one_unify.sail .................... [92mok[0m
+int_synonym.sail ....................... [92mok[0m
+modify_type_chain.sail ................. [92mok[0m
+rmem_rmemt_same.sail ................... [92mok[0m
+no_val_recur.sail ...................... [92mok[0m
+dec_prelude.sail ....................... [92mok[0m
+if_return.sail ......................... [92mok[0m
+recursion.sail ......................... [92mok[0m
+unsigned_index.sail .................... [92mok[0m
+flow_gt1.sail .......................... [92mok[0m
+string_literal_type.sail ............... [92mok[0m
+scattered_union_doc.sail ............... [92mok[0m
+single_enum.sail ....................... [92mok[0m
+exist_subrange.sail .................... [92mok[0m
+vector_append_gen.sail ................. [92mok[0m
+cast_simple.sail ....................... [92mok[0m
+return_simple2.sail .................... [92mok[0m
+scattered_enum.sail .................... [92mok[0m
+eqn_inst.sail .......................... [92mok[0m
+ex_list_infer.sail ..................... [92mok[0m
+if_type_if.sail ........................ [92mok[0m
+shadow_let.sail ........................ [92mok[0m
+flow_lt1.sail .......................... [92mok[0m
+bits_concat_pattern.sail ............... [92mok[0m
+nexp_synonym.sail ...................... [92mok[0m
+vec_length.sail ........................ [92mok[0m
+reg_32_64.sail ......................... [92mok[0m
+ex_cast.sail ........................... [92mok[0m
+overload_plus.sail ..................... [92mok[0m
+lt_flow.sail ........................... [92mok[0m
+cast_lexp1.sail ........................ [92mok[0m
+exist_simple.sail ...................... [92mok[0m
+bitvector_param.sail ................... [92mok[0m
+crlf.sail .............................. [92mok[0m
+zero_length_bv.sail .................... [92mok[0m
+mapping_rreg.sail ...................... [92mok[0m
+if_infer2.sail ......................... [92mok[0m
+bitfield_exponential.sail .............. [92mok[0m
+struct_pattern.sail .................... [92mok[0m
+tyvar_shadow.sail ...................... [92mok[0m
+bitfield_updates.sail .................. [92mok[0m
+list_infer.sail ........................ [92mok[0m
+constrained_struct.sail ................ [92mok[0m
+bitwise_not_x3.sail .................... [92mok[0m
+nat_set.sail ........................... [92mok[0m
+single_union.sail ...................... [92mok[0m
+case_simple1.sail ...................... [92mok[0m
+return_simple3.sail .................... [92mok[0m
+foreach_var_updates.sail ............... [92mok[0m
+exint.sail ............................. [92mok[0m
+zeros_implicit.sail .................... [92mok[0m
+phantom_bitlist_union.sail ............. [92mok[0m
+union_ctor_constraint.sail ............. [92mok[0m
+guards.sail ............................ [92mok[0m
+new_bitfields.sail ..................... [92mok[0m
+scattered_mapping_doc.sail ............. [92mok[0m
+existential_ast2.sail .................. [92mok[0m
+bool_constraint.sail ................... [92mok[0m
+concurrency_interface_dec.sail ......... [92mok[0m
+add_vec_exts_no_annot_overload.sail .... [92mok[0m
+phantom_num.sail ....................... [92mok[0m
+bitfield_pc.sail ....................... [92mok[0m
+try_while_try.sail ..................... [92mok[0m
+nexp_synonym2.sail ..................... [92mok[0m
+single_assign_in_block.sail ............ [92mok[0m
+struct_pattern_partial.sail ............ [92mok[0m
+inline_typ.sail ........................ [92mok[0m
+synth_ex_vs.sail ....................... [92mok[0m
+type_if_then_else_alt.sail ............. [92mok[0m
+flow_lt2.sail .......................... [92mok[0m
+enum_cast.sail ......................... [92mok[0m
+tuple_type_cast.sail ................... [92mok[0m
+not_pattern.sail ....................... [92mok[0m
+negative_bits_list.sail ................ [92mok[0m
+outcome_impl.sail ...................... [92mok[0m
+vector_access_dec.sail ................. [92mok[0m
+bv_simple_index_bit.sail ............... [92mok[0m
+vector_access.sail ..................... [92mok[0m
+while_MM.sail .......................... [92mok[0m
+list_cons.sail ......................... [92mok[0m
+cast_lexp2.sail ........................ [92mok[0m
+modify_assignment1.sail ................ [92mok[0m
+priv_fn_no_val.sail .................... [92mok[0m
+pure_record3.sail ...................... [92mok[0m
+issue434.sail .......................... [92mok[0m
+phantom_option.sail .................... [92mok[0m
+bits_if.sail ........................... [92mok[0m
+foreach_e.sail ......................... [92mok[0m
+outcome_impl_quant.sail ................ [92mok[0m
+wf_register_type.sail .................. [92mok[0m
+[94m222 passes and 0 failures[0m
+------------------------
+Testing failing programs
+------------------------
+Running 16 tests in parallel. Set TEST_PAR to configure
+strict_var.sail ........................ [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+scattered_map_mod.sail ................. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+synonym_rec.sail ....................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+duplicate_type_id.sail ................. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+duplicate_type_id4.sail ................ [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+add_vec_lit_old.sail ................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+prelude_no_order.sail .................. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+scattered_enum_mod.sail ................ [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+undefined_infer.sail ................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+struct_pattern_duplicate_field.sail .... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+and_let_bool.sail ...................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+unbound_tyvar2.sail .................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+mapping_body_private.sail .............. [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+negative_bits_existential.sail ......... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+issue277.sail .......................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+modify_enum2.sail ...................... [92mok[0m
+Running 16 tests in parallel. Set TEST_PAR to configure
+union_rec.sail ......................... [92mok[0m
+scattered_union_mod.sail ............... [92mok[0m
+enum_functions_partial.sail ............ [92mok[0m
+enum_shadow_let.sail ................... [92mok[0m
+scattered_function_mod.sail ............ [92mok[0m
+unbound_tyvar.sail ..................... [92mok[0m
+missing_tick.sail ...................... [92mok[0m
+modify_immutable2.sail ................. [92mok[0m
+issue244_3.sail ........................ [92mok[0m
+mix_declaration_update.sail ............ [92mok[0m
+undeclared_field_assignment.sail ....... [92mok[0m
+pub_val_priv_fn.sail ................... [92mok[0m
+duplicate_toplevel_let.sail ............ [92mok[0m
+abstract_bool_inconsistent.sail ........ [92mok[0m
+vector_pattern_split.sail .............. [92mok[0m
+issue243.sail .......................... [92mok[0m
+duplicate_type_id6.sail ................ [92mok[0m
+overload_member_scope.sail ............. [92mok[0m
+assignment_simple.sail ................. [92mok[0m
+procstate1.sail ........................ [92mok[0m
+duplicate_type_id2.sail ................ [92mok[0m
+scattered_union_rec.sail ............... [92mok[0m
+private_extension.sail ................. [92mok[0m
+bv_update_error.sail ................... [92mok[0m
+mapping_two_type.sail .................. [92mok[0m
+non_synonym.sail ....................... [92mok[0m
+poly_ab_mapping.sail ................... [92mok[0m
+unscope_val.sail ....................... [92mok[0m
+negative_bits_struct2.sail ............. [92mok[0m
+negative_bits_struct.sail .............. [92mok[0m
+duplicate_quant.sail ................... [92mok[0m
+struct_incomplete_literal.sail ......... [92mok[0m
+private_scattered_enum.sail ............ [92mok[0m
+private_scattered_map.sail ............. [92mok[0m
+duplicate_ctor.sail .................... [92mok[0m
+struct_rec.sail ........................ [92mok[0m
+union_recf.sail ........................ [92mok[0m
+issue244_1.sail ........................ [92mok[0m
+private_union.sail ..................... [92mok[0m
+empty_su.sail .......................... [92mok[0m
+empty_vector_infer.sail ................ [92mok[0m
+bitfield_bits_field.sail ............... [92mok[0m
+private_ctor.sail ...................... [92mok[0m
+issue244_4.sail ........................ [92mok[0m
+mapping_length_mismatch.sail ........... [92mok[0m
+encdec_unknown_and_error.sail .......... [92mok[0m
+negative_bits_tuple.sail ............... [92mok[0m
+enum_function_override.sail ............ [92mok[0m
+duplicate_type_id3.sail ................ [92mok[0m
+private_scattered_union.sail ........... [92mok[0m
+duplicate_builtin.sail ................. [92mok[0m
+private_scattered_fn.sail .............. [92mok[0m
+global_false_constraint.sail ........... [92mok[0m
+shadow_leak_infer.sail ................. [92mok[0m
+shadow_leak_check.sail ................. [92mok[0m
+no_possible_overload.sail .............. [92mok[0m
+issue244_2.sail ........................ [92mok[0m
+no_function3.sail ...................... [92mok[0m
+invalid_function_val.sail .............. [92mok[0m
+private_function.sail .................. [92mok[0m
+negative_bits_union2.sail .............. [92mok[0m
+duplicate_binding.sail ................. [92mok[0m
+negative_bits_union.sail ............... [92mok[0m
+undeclared_vector_assignment.sail ...... [92mok[0m
+overload_bound.sail .................... [92mok[0m
+duplicate_type_id5.sail ................ [92mok[0m
+private_clause.sail .................... [92mok[0m
+enum_shadow_reg.sail ................... [92mok[0m
+cond_mod.sail .......................... [92mok[0m
+duplicate_toplevel_let_mod.sail ........ [92mok[0m
+enum_shadow.sail ....................... [92mok[0m
+no_function.sail ....................... [92mok[0m
+modify_immutable.sail .................. [92mok[0m
+unscope_let.sail ....................... [92mok[0m
+nonexistent_overload.sail .............. [92mok[0m
+unscope_type.sail ...................... [92mok[0m
+bitfield_error.sail .................... [92mok[0m
+no_function2.sail ...................... [92mok[0m
+unscope_enum.sail ...................... [92mok[0m
+modify_enum.sail ....................... [92mok[0m
+unscope_register.sail .................. [92mok[0m
+wf_assign_type.sail .................... [92mok[0m
+[94m98 passes and 0 failures[0m

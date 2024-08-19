@@ -3,20 +3,20 @@ $include <prelude.sail>
 
 union ast = {
   B : (bool),
-  Z : unit
+  Z : unit,
 }
 
-mapping bool_not_bits2 : bool <-> bits(2) = {
-  true   <-> 0b10,
-  false  <-> 0b11
+mapping bool_not_bits : bool <-> bits(1) = {
+  true   <-> 0b0,
+  false  <-> 0b1,
 }
+
 mapping encdec  : bits(2) <->  ast = {
+  0b1 @ bool_not_bits(s) <-> B(s),
   0b00 <-> Z(),
-  0b01 <-> Z(),
-  bool_not_bits2(s) <-> B(s),
 }
 
 val main : unit -> unit
 function main() = {
-    let encdec_value = encdec(0b00)
+    let _ = encdec(0b00)
 }

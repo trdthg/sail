@@ -467,7 +467,15 @@ let run_sail (config : Yojson.Basic.t option) tgt =
               arguments with the appropriate extension, but not both!"
           )
   in
+
+  Printf.printf "----------------- mapdef  before initial_rewrite -----------------\n";
+  (* Pretty_print_sail.output_ast stdout (Type_check.strip_ast ast); *)
+
   let ast, env = Frontend.initial_rewrite effect_info env ast in
+
+  Printf.printf "----------------- mapdef  after  initial_rewrite -----------------\n";
+  (* Pretty_print_sail.output_ast stdout (Type_check.strip_ast ast); *)
+
   let ast, env = match !opt_splice with [] -> (ast, env) | files -> Splice.splice_files ctx ast (List.rev files) in
   let effect_info = Effects.infer_side_effects (Target.asserts_termination tgt) ast in
 
@@ -477,6 +485,9 @@ let run_sail (config : Yojson.Basic.t option) tgt =
 
   Target.run_pre_rewrites_hook tgt ast effect_info env;
   let ctx, ast, effect_info, env = Rewrites.rewrite ctx effect_info env (Target.rewrites tgt) ast in
+
+  Printf.printf "----------------- mapdef  after  -----------------\n";
+  Pretty_print_sail.output_ast stdout (Type_check.strip_ast ast);
 
   Target.action tgt !opt_file_out { ctx; ast; effect_info; env; default_sail_dir = Locations.sail_dir; config };
 
@@ -558,6 +569,7 @@ let parse_config_file file =
     None
 
 let main () =
+  Printf.printf "----------------- 0 -----------------\n";
   if Option.is_some (Sys.getenv_opt "SAIL_NEW_CLI") then opt_new_cli := true;
 
   options := Arg.align (fix_options !options);

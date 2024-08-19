@@ -1,0 +1,6 @@
+*.bin
+*.branches
+*.c
+*.html
+*.taken
+log*

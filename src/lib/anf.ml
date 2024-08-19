@@ -568,11 +568,14 @@ let rec split_block l = function
       (exp :: exps, last)
   | [] -> Reporting.unreachable l __POS__ "empty block found when converting to ANF" [@coverage off]
 
-let rec anf_pat ?(global = false) (P_aux (p_aux, annot) as pat) =
-  let mk_apat aux = AP_aux (aux, env_of_annot annot, fst annot) in
+let rec anf_pat ?(global = false) (P_aux (p_aux, ((l, _) as annot)) as pat) =
+  Printf.printf "anf::E_match::anf_pexp->anf_pat pat=%s loc=%s\n" (string_of_pat pat) (simple_string_of_loc l);
+  let mk_apat aux = AP_aux (aux, env_of_annot annot, l) in
   match p_aux with
   | P_id id when global -> mk_apat (AP_global (id, typ_of_pat pat))
-  | P_id id -> mk_apat (AP_id (id, typ_of_pat pat))
+  | P_id id ->
+      Printf.printf "P_id id\n";
+      mk_apat (AP_id (id, typ_of_pat pat))
   | P_wild -> mk_apat (AP_wild (typ_of_pat pat))
   | P_tuple pats -> mk_apat (AP_tuple (List.map (fun pat -> anf_pat ~global pat) pats))
   | P_app (id, [subpat]) -> mk_apat (AP_app (id, anf_pat ~global subpat, typ_of_pat pat))
@@ -605,6 +608,7 @@ let rec apat_globals (AP_aux (aux, _, _)) =
   | AP_struct (afpats, _) -> List.concat (List.map (fun (_, apat) -> apat_globals apat) afpats)
 
 let rec anf (E_aux (e_aux, (l, tannot)) as exp) =
+  Printf.printf "anf::E_match::and exp=%s loc=%s\n" (string_of_exp exp) (simple_string_of_loc l);
   let mk_aexp aexp = AE_aux (aexp, { loc = l; env = env_of_tannot tannot; uannot = untyped_annot tannot }) in
 
   let rec anf_lexp env (LE_aux (aux, (l, _)) as lexp) =
@@ -751,11 +755,26 @@ let rec anf (E_aux (e_aux, (l, tannot)) as exp) =
       let lvar = Env.lookup_id id (env_of exp) in
       mk_aexp (AE_val (AV_ref (id, lvar)))
   | E_match (match_exp, pexps) ->
+      Printf.printf "\n##### E_match exp=%s loc=%s\n" (string_of_exp match_exp) (simple_string_of_loc l);
       let match_aval, match_wrap = to_aval (anf match_exp) in
-      let anf_pexp (Pat_aux (pat_aux, _)) =
+      let anf_pexp (Pat_aux (pat_aux, (l, _))) =
         match pat_aux with
-        | Pat_when (pat, guard, body) -> (anf_pat pat, anf guard, anf body)
-        | Pat_exp (pat, body) -> (anf_pat pat, mk_aexp (AE_val (AV_lit (mk_lit L_true, bool_typ))), anf body)
+        | Pat_when (pat, guard, body) ->
+            Printf.printf "#### anf::E_match::anf_pexp::Pat_when pat=%s loc=%s guard_exp=%s\n" (string_of_pat pat)
+              (simple_string_of_loc l) (string_of_exp guard);
+            Printf.printf "### pat \n";
+            let pat = anf_pat pat in
+            Printf.printf "### body \n";
+            let body = anf body in
+            (pat, anf guard, body)
+        | Pat_exp (pat, body) ->
+            Printf.printf "#### anf::E_match::anf_pexp::Pat_exp pat=%s loc=%s\n" (string_of_pat pat)
+              (simple_string_of_loc l);
+            Printf.printf "### pat \n";
+            let pat = anf_pat pat in
+            Printf.printf "### body \n";
+            let body = anf body in
+            (pat, mk_aexp (AE_val (AV_lit (mk_lit L_true, bool_typ))), body)
       in
       match_wrap (mk_aexp (AE_match (match_aval, List.map anf_pexp pexps, typ_of exp)))
   | E_try (match_exp, pexps) ->
