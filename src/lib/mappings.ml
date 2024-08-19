@@ -184,6 +184,7 @@ let rec split_arms map_uannot is_mapping subst prev_arms = function
           split_arms map_uannot is_mapping subst (arm :: prev_arms) arms
       | pat, mappings ->
           Printf.printf "split_arms::end\n";
+          (* prev,                                     pat,               mapping,   after *)
           (List.rev prev_arms, Some (Pat_aux (Pat_exp (pat, exp), annot), mappings, arms))
     end
   | (Pat_aux (Pat_when (pat, guard, exp), annot) as arm) :: arms -> begin
@@ -213,9 +214,9 @@ let name_gen prefix =
 
 let some_arm = function
   | Pat_aux (Pat_exp (pat, exp), ((l, _) as annot)) ->
-      Pat_aux (Pat_exp (pat, mk_exp ~loc:l (E_app (mk_id ~loc:l "Some", [exp]))), annot)
+      Pat_aux (Pat_exp (pat, mk_exp ~loc:l (E_app (mk_id "Some", [exp]))), annot)
   | Pat_aux (Pat_when (pat, guard, exp), ((l, _) as annot)) ->
-      Pat_aux (Pat_when (pat, guard, mk_exp ~loc:l (E_app (mk_id ~loc:l "Some", [exp]))), annot)
+      Pat_aux (Pat_when (pat, guard, mk_exp (E_app (mk_id "Some", [exp]))), annot)
 
 let wildcard_none = mk_pexp (Pat_exp (mk_pat P_wild, mk_exp (E_app (mk_id "None", [mk_lit_exp L_unit]))))
 
@@ -293,6 +294,7 @@ let rec mappings_match is_mapping subst mappings pexp =
     | _ -> Reporting.unreachable l __POS__ "Non-mapping in mappings_match"
   in
   let pat, guard_opt, exp, (l, _) = destruct_pexp pexp in
+  Printf.printf "test destruct_pexp %s\n" (simple_string_of_loc l);
   let mappings = List.map handle_mapping mappings in
   let head_exp = tuple_exp (List.map (fun (head_exp, _, _) -> head_exp) mappings) in
   let guard_exp = conj_exp (List.map (fun (_, guard_exp, _) -> guard_exp) mappings) in
@@ -300,7 +302,7 @@ let rec mappings_match is_mapping subst mappings pexp =
   let match_exp =
     let arms =
       [
-        construct_pexp (subpat, guard_opt, mk_exp (E_app (mk_id "Some", [exp])), (gen_loc l, empty_uannot));
+        construct_pexp (subpat, guard_opt, mk_exp ~loc:l (E_app (mk_id "Some", [exp])), (gen_loc l, empty_uannot));
         wildcard_none;
       ]
     in
@@ -319,6 +321,7 @@ and rewrite_arms is_mapping subst msa (l, uannot) =
 
   (* 2. before_arms *)
   let new_head_exp =
+    (*                                                            only before_arms is Some                  *)
     mk_exp (E_match (mk_exp (E_id head_exp_tmp), List.map some_arm msa.before_arms @ [mmatch; wildcard_none]))
     |> match_complete
   in

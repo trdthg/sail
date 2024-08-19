@@ -12,11 +12,17 @@ mapping bool_not_bits : bool <-> bits(1) = {
 }
 
 mapping encdec  : bits(2) <->  ast = {
+  0b00 <-> Z(),
+  0b1 @ bool_not_bits(s) <-> B(s),
+}
+
+mapping encdec2  : bits(2) <->  ast = {
   0b1 @ bool_not_bits(s) <-> B(s),
   0b00 <-> Z(),
 }
 
 val main : unit -> unit
 function main() = {
-    let _ = encdec(0b00)
+    let _ = encdec(0b00);
+    let _ = encdec2(0b00);
 }
