@@ -236,6 +236,8 @@ val copy_file : string -> string -> unit
     fallback. *)
 val move_file : string -> string -> unit
 
+val file_to_string : string -> string
+
 (** [input_byte_opt chan] tries to read a byte [b] from input channel [chan], and
     returns [Some b] in case of success, or [None] if the end of the file was reached. *)
 val input_byte_opt : in_channel -> int option

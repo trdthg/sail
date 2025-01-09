@@ -194,6 +194,7 @@ let err_typ ?hint l m = Fatal_error (Err_type (l, hint, m))
 let err_syntax p m = Fatal_error (Err_syntax (p, m))
 let err_syntax_loc l m = Fatal_error (Err_syntax_loc (l, m))
 let err_lex p m = Fatal_error (Err_lex (p, m))
+let err_sprintf e = dest_err e |> fun (t, _, _, m) -> t ^ m
 
 let unreachable l pos msg = raise (err_unreachable l pos msg)
 

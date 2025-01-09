@@ -415,21 +415,6 @@ let rec options =
 
 let register_default_target () = Target.register ~name:"default" ~supports_abstract_types:true Target.empty_action
 
-let file_to_string filename =
-  let chan = open_in filename in
-  let buf = Buffer.create 4096 in
-  try
-    let rec loop () =
-      let line = input_line chan in
-      Buffer.add_string buf line;
-      Buffer.add_char buf '\n';
-      loop ()
-    in
-    loop ()
-  with End_of_file ->
-    close_in chan;
-    Buffer.contents buf
-
 let run_sail (config : Yojson.Basic.t option) tgt =
   Target.run_pre_parse_hook tgt ();
 
@@ -452,7 +437,7 @@ let run_sail (config : Yojson.Basic.t option) tgt =
           List.map
             (fun project_file ->
               let root_directory = Filename.dirname project_file in
-              let contents = file_to_string project_file in
+              let contents = Util.file_to_string project_file in
               Project.mk_root root_directory :: Initial_check.parse_project ~filename:project_file ~contents ()
             )
             project_files
@@ -520,7 +505,7 @@ let run_sail_format (config : Yojson.Basic.t option) =
   let parsed_files = List.map (fun f -> (f, Initial_check.parse_file f)) !opt_free_arguments in
   List.iter
     (fun (f, (comments, parse_ast)) ->
-      let source = file_to_string f in
+      let source = Util.file_to_string f in
       if is_format_file f && not (is_skipped_file f) then (
         let formatted = Formatter.format_defs ~debug:true f source comments parse_ast in
         begin

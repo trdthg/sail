@@ -104,6 +104,12 @@ http://www.cl.cam.ac.uk/~pes20/sail/.
     (libsail (= :version))))
 
 (package
+  (name sail_language_server)
+  (synopsis "Sail Language Server")
+  (depends
+    (libsail (= :version))))
+
+(package
   (name sail_output)
   (synopsis "Example Sail output plugin")
   (depends

@@ -89,6 +89,8 @@ val editor_take_file : contents:string -> string -> handle
     message, in which case we need to manage the file. *)
 val editor_drop_file : handle -> unit
 
+val editor_reset_file : contents:string -> string -> unit
+
 (** The LSP protocol uses line + character offsets as positions *)
 type editor_position = { line : int; character : int }
 

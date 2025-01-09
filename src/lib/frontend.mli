@@ -47,12 +47,30 @@
 open Ast
 open Ast_defs
 open Ast_util
+open Type_check
 
 val opt_ddump_initial_ast : bool ref
 val opt_ddump_side_effect : bool ref
 val opt_ddump_tc_ast : bool ref
 val opt_list_files : bool ref
 val opt_reformat : string option ref
+
+type parse_continuation = {
+  check : Type_check.Env.t -> Type_check.typed_ast * Type_check.Env.t;
+  vs_ids : IdSet.t;
+  regs : (Ast.id * Ast.typ) list;
+  ctx : Initial_check.ctx;
+}
+
+type parsed_file =
+  | Generated of Parse_ast.def list
+  | File of { filename : string; cont : Initial_check.ctx -> parse_continuation }
+
+type parsed_module = { id : Project.mod_id; included : bool; files : parsed_file list }
+
+type processed_file =
+  | ProcessedGenerated of untyped_def list
+  | ProcessedFile of { filename : string; cont : Type_check.Env.t -> Type_check.typed_ast * Type_check.Env.t }
 
 val instantiate_abstract_types :
   Target.target option -> (kind_aux -> typ_arg) Bindings.t -> Type_check.typed_ast -> Type_check.typed_ast
@@ -101,9 +119,19 @@ module type FILE_HANDLER = sig
   val check : Type_check.Env.t -> processed -> Type_check.typed_ast * Type_check.Env.t
 end
 
+val get_handler : filename:string -> string -> (module FILE_HANDLER)
+
 (** Register a file handler module. The extension should be the
     extension for the file type we want to handle, e.g. ".json". *)
 val register_file_handler : extension:string -> (module FILE_HANDLER) -> unit
+
+val parse_file :
+  ?loc:Parse_ast.l ->
+  target_name:string option ->
+  default_sail_dir:string ->
+  options:(string * Arg.spec * string) list ->
+  string ->
+  parsed_file
 
 val load_modules :
   ?target:Target.target ->

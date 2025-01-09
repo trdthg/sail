@@ -327,6 +327,24 @@ let editor_drop_file handle =
   let info = Hashtbl.find files handle in
   Hashtbl.replace files handle { info with owner = Compiler }
 
+let editor_reset_file ~contents path =
+  Log.debug "editor_reset_file: %s" path;
+  Log.debug "contents: %s" contents;
+  ( match Hashtbl.find_opt opened path with
+  | Some handle ->
+      Log.debug "editor_reset_file: dropping %s" path;
+
+      Hashtbl.remove files handle
+  | None -> ()
+  );
+
+  let contents = Array.of_list (String.split_on_char '\n' contents) in
+  let handle = new_handle () in
+  let canonical_path = canonicalize path in
+  let info = new_info ~owner:Compiler ~given_path:path ~canonical_path ~contents in
+  Hashtbl.replace files handle info;
+  Hashtbl.replace opened path handle
+
 let contents handle =
   let lines = (Hashtbl.find files handle).contents in
   let len = Array.fold_left (fun len line -> len + String.length line + 1) 0 lines in

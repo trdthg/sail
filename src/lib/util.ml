@@ -349,6 +349,21 @@ let move_file src dst =
     copy_file src dst;
     Sys.remove src
 
+let file_to_string filename =
+  let chan = open_in filename in
+  let buf = Buffer.create 4096 in
+  try
+    let rec loop () =
+      let line = input_line chan in
+      Buffer.add_string buf line;
+      Buffer.add_char buf '\n';
+      loop ()
+    in
+    loop ()
+  with End_of_file ->
+    close_in chan;
+    Buffer.contents buf
+
 let input_byte_opt chan = try Some (input_byte chan) with End_of_file -> None
 
 let same_content_files file1 file2 : bool =

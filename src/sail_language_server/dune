@@ -1,0 +1,12 @@
+(executable
+ (name sail_language_server)
+ (public_name sail_language_server)
+ (libraries linol linol-eio eio_main libsail lsp)
+ (package sail_language_server))
+
+(install
+ (section
+  (site
+   (libsail plugins)))
+ (package sail_language_server)
+ (files sail_language_server.ml lsp_util.ml))

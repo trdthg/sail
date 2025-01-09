@@ -203,9 +203,12 @@ let get_handler ~filename = function
 let parse_file ?loc ~target_name ~default_sail_dir ~options filename =
   let extension = Filename.extension filename in
   let module Handler = (val get_handler ~filename extension : FILE_HANDLER) in
+  Log.debug "Parsing file %s" filename;
   let parsed = Handler.parse loc filename in
   let cont ctx =
+    Log.debug "Handler.process %s" filename;
     let processed, ctx = Handler.process ~target_name ~default_sail_dir ~options ctx parsed in
+    Log.debug "Handler.check %s" filename;
     {
       check = (fun env -> Handler.check env processed);
       vs_ids = Handler.defines_functions processed;
