@@ -98,6 +98,8 @@ type suggestion = Suggest_add_constraint of Ast.n_constraint | Suggest_none
 val analyze_unresolved_quant :
   (Ast_util.mut * Ast.typ) Ast_util.Bindings.t -> Ast.n_constraint list -> Ast.quant_item -> suggestion
 
+val message_of_type_error : type_error -> Error_format.message * string option
+
 val string_of_type_error : type_error -> string * string option
 
 (** Convert a type error into a general purpose error from the Reporting file *)

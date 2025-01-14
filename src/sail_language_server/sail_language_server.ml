@@ -85,6 +85,29 @@ let get_mod_filename path =
   done;
   !result
 
+let info_to_diag (err_type, hint, loc, msg) =
+  Log.debug "_on_doc_handler diag msg %s" msg;
+  Diagnostic.create
+    ~message:
+      (Printf.sprintf "%s %s %s" err_type msg
+         (match loc with Reporting.Loc loc -> Reporting.loc_to_string loc | _ -> "")
+      )
+    ~range:
+      ( match loc with
+      | Reporting.Pos { pos_fname; pos_lnum; pos_bol; pos_cnum } ->
+          let row = pos_lnum - 1 in
+          new_r row pos_bol row pos_bol
+      | Reporting.Loc loc -> (
+          match loc with
+          (* | Unique of int * l *)
+          (* | Generated of l *)
+          (* | Hint (hint, l1, l2) -> new_r 0 0 0 0 *)
+          | Range (p1, p2) -> new_r (p1.pos_lnum - 1) p1.pos_bol (p2.pos_lnum - 1) p2.pos_bol
+          | Unknown | _ -> new_r 0 9 0 13
+        )
+      )
+    ()
+
 class lsp_server =
   object (self)
     inherit Linol_eio.Jsonrpc2.server
@@ -117,7 +140,7 @@ class lsp_server =
       Sail_file.editor_reset_file ~contents:(Util.file_to_string path) mod_path;
       let t = Printf.sprintf "%f" (Unix.time ()) in
       Log.debug "before diags %s" t;
-      let diag, ast =
+      let diags, ast =
         try
           (* handle type check *)
           let ctx, ast, env, effect_info =
@@ -149,13 +172,69 @@ class lsp_server =
                (* let ctx, ast, effect_info, env = *)
                Rewrites.rewrite ctx effect_info env (Target.rewrites tgt) ast
              in *)
-          (None, Some res_ast)
+          ([], Some res_ast)
           (* List.fold_left (fun "" e -> "") effect_info "" *)
-        with Libsail.Reporting.Fatal_error e ->
-          Log.debug "get_ordered_files failed";
-          (Some (Reporting.dest_err e), None)
+        with
+        | Libsail.Reporting.Fatal_error e ->
+            Log.debug "get_ordered_files failed";
+            ([info_to_diag @@ Reporting.dest_err e], None)
+        | Libsail.Type_error.Type_error (l, e) ->
+            (* let rec format_loc prefix hint l contents =
+                 match l with
+                 | Parse_ast.Unknown -> contents
+                 | Parse_ast.Range (p1, p2) -> format_pos prefix hint p1 p2 contents
+                 | Parse_ast.Unique (_, l) -> format_loc prefix hint l contents
+                 | Parse_ast.Hint (hint', l1, l2) ->
+                     fun ppf ->
+                       format_loc prefix (Some hint') l1 (fun _ -> ()) { ppf with loc_color = Util.green };
+                       format_loc prefix hint l2 contents ppf
+                 | Parse_ast.Generated l ->
+                     fun ppf ->
+                       format_endline "Code generated nearby:" ppf;
+                       format_loc prefix hint l contents ppf
+
+               let rec format_message msg ppf =
+                 match msg with
+                 | Location (prefix, hint, l, msg) -> format_loc prefix hint l (format_message msg) ppf
+                 | Line str -> format_endline str ppf
+                 | Seq messages -> List.iter (fun msg -> format_message msg ppf) messages
+                 | List list ->
+                     let format_list_item ppf (header, msg) =
+                       format_endline (Util.(clear (blue "*")) ^ " " ^ header) ppf;
+                       format_message msg { ppf with indent = ppf.indent ^ "  " }
+                     in
+                     List.iter (format_list_item ppf) list
+                 | Severity (Sev_error, msg) -> format_message msg { ppf with loc_color = Util.red }
+                 | Severity (Sev_warn, msg) -> format_message msg { ppf with loc_color = Util.yellow } *)
+            let msg, hint = Type_error.message_of_type_error e in
+            let open Error_format in
+            let format_loc prefix hint l formated_msg =
+              match l with
+              | Unknown -> formated_msg
+              | Range (p1, p2) ->
+                  let row_s = p1.pos_lnum - 1 in
+                  let col_s = p1.pos_bol in
+                  let row_e = p2.pos_lnum - 1 in
+                  let col_e = p2.pos_bol in
+                  let loc = new_l row_s col_s row_e col_e path in
+                  let diag = Diagnostic.create ~message:formated_msg ~range:(new_r row_s col_s row_e col_e) () in
+                  diag
+              | _ -> raise (Failure "format_loc")
+            in
+            let rec format_message_to_lsp msg color =
+              match msg with
+              | _ -> []
+              | Location (prefix, hint, l, msg) -> [format_loc prefix hint l (format_message_to_lsp msg Util.red)]
+              | Line str -> [(new_l 0 0 0 0 path, str)]
+              (* | Seq messages -> List.iter (fun msg -> format_message msg) messages *)
+              (* | List list -> List.iter format_list_to_lsp list *)
+              | Severity (Sev_error, msg) -> format_message_to_lsp msg Util.red
+              | Severity (Sev_warn, msg) -> format_message_to_lsp msg Util.yellow
+            in
+            let diags = [] in
+            ([], None)
       in
-      let diags =
+      let default_diags =
         [
           Diagnostic.create ~message:t ~severity:DiagnosticSeverity.Information ~range:(new_r 0 0 0 0) ();
           Diagnostic.create
@@ -163,35 +242,7 @@ class lsp_server =
             ~severity:DiagnosticSeverity.Information ~range:(new_r 0 0 0 0) ();
         ]
       in
-      let diags =
-        match diag with
-        | Some (err_type, hint, loc, msg) ->
-            Log.debug "_on_doc_handler diag msg %s" msg;
-            diags
-            @ [
-                Diagnostic.create
-                  ~message:
-                    (Printf.sprintf "%s %s %s" err_type msg
-                       (match loc with Reporting.Loc loc -> Reporting.loc_to_string loc | _ -> "")
-                    )
-                  ~range:
-                    ( match loc with
-                    | Reporting.Pos { pos_fname; pos_lnum; pos_bol; pos_cnum } ->
-                        let row = pos_lnum - 1 in
-                        new_r row pos_bol row pos_bol
-                    | Reporting.Loc loc -> (
-                        match loc with
-                        (* | Unique of int * l *)
-                        (* | Generated of l *)
-                        (* | Hint (hint, l1, l2) -> new_r 0 0 0 0 *)
-                        | Range (p1, p2) -> new_r (p1.pos_lnum - 1) p1.pos_bol (p2.pos_lnum - 1) p2.pos_bol
-                        | Unknown | _ -> new_r 0 9 0 13
-                      )
-                    )
-                  ();
-              ]
-        | _ -> diags
-      in
+      let diags = default_diags @ diags in
       Log.debug "发送开始";
       notify_back#send_diagnostic diags;
       Log.debug "发送成功"

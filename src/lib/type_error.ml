@@ -1,4 +1,3 @@
-(****************************************************************************)
 (*     Sail                                                                 *)
 (*                                                                          *)
 (*  Sail and the Sail architecture models here, comprising all files and    *)
@@ -557,4 +556,4 @@ let check_defs : Env.t -> untyped_def list -> typed_def list * Env.t =
  fun env defs -> try Type_check.check_defs env defs with Type_error (l, err) -> raise (to_reporting_exn l err)
 
 let check : Env.t -> untyped_ast -> typed_ast * Env.t =
- fun env defs -> try Type_check.check env defs with Type_error (l, err) -> raise (to_reporting_exn l err)
+ fun env defs -> try Type_check.check env defs with Type_error (l, err) -> raise (Type_error (l, err))
