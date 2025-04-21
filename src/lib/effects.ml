@@ -225,7 +225,10 @@ let infer_mapdef_extra_direct_effects def =
   let rw_pat set = fold_pat { id_pat_alg with p_aux = (fun (p_aux, annot) -> scan_pat set p_aux annot) } in
   let rw_mpat set = fold_mpat { id_mpat_alg with p_aux = (fun (mp_aux, annot) -> scan_mpat set mp_aux annot) } in
   let scan_pexp set (Pat_aux (aux, _)) =
-    match aux with Pat_exp (pat, _) -> ignore (rw_pat set pat) | Pat_when (pat, _, _) -> ignore (rw_pat set pat)
+    match aux with
+    | Pat_exp (pat, _) -> ignore (rw_pat set pat)
+    | Pat_or (pats, _) -> ignore (List.iter (fun pat -> ignore (rw_pat set pat)) pats)
+    | Pat_when (pat, _, _) -> ignore (rw_pat set pat)
   in
   let scan_mpexp set (MPat_aux (aux, _)) =
     match aux with MPat_pat mpat -> ignore (rw_mpat set mpat) | MPat_when (mpat, _) -> ignore (rw_mpat set mpat)

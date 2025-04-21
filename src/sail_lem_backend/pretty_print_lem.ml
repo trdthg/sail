@@ -1188,6 +1188,9 @@ let doc_exp_lem, doc_let_lem =
   and doc_case ctxt = function
     | Pat_aux (Pat_exp (pat, e), _) ->
         group (prefix 3 1 (separate space [pipe; doc_pat_lem ctxt false pat; arrow]) (group (top_exp ctxt false e)))
+    | Pat_aux (Pat_or (pats, e), _) ->
+        let pats_doc = separate_map (space ^^ pipe ^^ space) (doc_pat_lem ctxt false) pats in
+        group (prefix 3 1 (separate space [pipe; pats_doc; arrow]) (group (top_exp ctxt false e)))
     | Pat_aux (Pat_when (_, _, _), (l, _)) ->
         raise
           (Reporting.err_unreachable l __POS__

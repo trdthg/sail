@@ -152,8 +152,25 @@ let rewrite_pexp rewriters =
   let rewrite = rewriters.rewrite_exp rewriters in
   function
   | Pat_aux (Pat_exp (p, e), pannot) -> Pat_aux (Pat_exp (rewriters.rewrite_pat rewriters p, rewrite e), pannot)
+  | Pat_aux (Pat_or (ps, e), (l, _)) ->
+      raise (Reporting.err_unreachable l __POS__ "Pattern or is not supported in non-match context")
   | Pat_aux (Pat_when (p, e, e'), pannot) ->
       Pat_aux (Pat_when (rewriters.rewrite_pat rewriters p, rewrite e, rewrite e'), pannot)
+
+let rewrite_pexp_with_index rewriters i =
+  let rewrite = rewriters.rewrite_exp rewriters in
+  function
+  | Pat_aux (Pat_or (ps, e), ((l, _) as pannot)) ->
+      let id = mk_id ("p#" ^ string_of_int i) in
+      let a = pannot in
+      let p = P_aux (P_id id, a) in
+      let cases =
+        List.mapi (fun i p -> Pat_aux (Pat_exp (p, E_aux (E_lit (mk_lit L_true), a)), a)) ps
+        @ [Pat_aux (Pat_exp (P_aux (P_wild, a), E_aux ((E_lit (mk_lit L_false)), a)), a)]
+      in
+      let guard = E_aux (E_match (E_aux (E_id id, a), cases), pannot) in
+      Pat_aux (Pat_when (rewriters.rewrite_pat rewriters p, rewrite guard, rewrite e), pannot)
+  | pat -> rewrite_pexp rewriters pat
 
 let rewrite_pat rewriters (P_aux (pat, (l, annot))) =
   let rewrap p = P_aux (p, (l, annot)) in
@@ -228,7 +245,7 @@ let rewrite_exp rewriters (E_aux (exp, (l, annot))) =
            )
         )
   | E_field (exp, id) -> rewrap (E_field (rewrite exp, id))
-  | E_match (exp, pexps) -> rewrap (E_match (rewrite exp, List.map (rewrite_pexp rewriters) pexps))
+  | E_match (exp, pexps) -> rewrap (E_match (rewrite exp, List.mapi (rewrite_pexp_with_index rewriters) pexps))
   | E_try (exp, pexps) -> rewrap (E_try (rewrite exp, List.map (rewrite_pexp rewriters) pexps))
   | E_let (letbind, body) -> rewrap (E_let (rewriters.rewrite_let rewriters letbind, rewrite body))
   | E_assign (lexp, exp) -> rewrap (E_assign (rewriters.rewrite_lexp rewriters lexp, rewrite exp))
@@ -560,6 +577,7 @@ type ( 'a,
   def_val_dec : 'exp -> 'opt_default_aux;
   def_val_aux : 'opt_default_aux * 'a annot -> 'opt_default;
   pat_exp : 'pat * 'exp -> 'pexp_aux;
+  pat_or : 'pat list * 'exp -> 'pexp_aux;
   pat_when : 'pat * 'exp * 'exp -> 'pexp_aux;
   pat_aux : 'pexp_aux * 'a annot -> 'pexp;
   lb_val : 'pat * 'exp -> 'letbind_aux;
@@ -636,6 +654,7 @@ and fold_fexp alg (FE_aux (fexp_aux, annot)) = alg.fe_aux (fold_fexp_aux alg fex
 
 and fold_pexp_aux alg = function
   | Pat_exp (pat, e) -> alg.pat_exp (fold_pat alg.pat_alg pat, fold_exp alg e)
+  | Pat_or (pats, e) -> alg.pat_or (List.map (fun pat -> fold_pat alg.pat_alg pat) pats, fold_exp alg e)
   | Pat_when (pat, e, e') -> alg.pat_when (fold_pat alg.pat_alg pat, fold_exp alg e, fold_exp alg e')
 
 and fold_pexp alg (Pat_aux (pexp_aux, annot)) = alg.pat_aux (fold_pexp_aux alg pexp_aux, annot)
@@ -710,6 +729,7 @@ let id_exp_alg =
     def_val_dec = (fun e -> Def_val_dec e);
     def_val_aux = (fun (defval, aux) -> Def_val_aux (defval, aux));
     pat_exp = (fun (pat, e) -> Pat_exp (pat, e));
+    pat_or = (fun (pats, e) -> Pat_or (pats, e));
     pat_when = (fun (pat, e, e') -> Pat_when (pat, e, e'));
     pat_aux = (fun (pexp, a) -> Pat_aux (pexp, a));
     lb_val = (fun (pat, e) -> LB_val (pat, e));
@@ -850,6 +870,7 @@ let compute_exp_alg bot join =
     def_val_dec = (fun (v, e) -> (v, Def_val_dec e));
     def_val_aux = (fun ((v, defval), aux) -> (v, Def_val_aux (defval, aux)));
     pat_exp = (fun ((vp, pat), (v, e)) -> (join vp v, Pat_exp (pat, e)));
+    pat_or = (fun (pairs, (v, e)) -> (join_list (List.map fst pairs), Pat_or (List.map snd pairs, e)));
     pat_when = (fun ((vp, pat), (v, e), (v', e')) -> (join_list [vp; v; v'], Pat_when (pat, e, e')));
     pat_aux = (fun ((v, pexp), a) -> (v, Pat_aux (pexp, a)));
     lb_val = (fun ((vp, pat), (v, e)) -> (join vp v, LB_val (pat, e)));
@@ -942,6 +963,7 @@ let pure_exp_alg bot join =
     def_val_dec = (fun v -> v);
     def_val_aux = (fun (v, aux) -> v);
     pat_exp = (fun (vp, v) -> join vp v);
+    pat_or = (fun (vps, v) -> join_list (vps @ [v]));
     pat_when = (fun (vp, v, v') -> join_list [vp; v; v']);
     pat_aux = (fun (v, a) -> v);
     lb_val = (fun (vp, v) -> join vp v);
@@ -959,6 +981,9 @@ let default_fold_pexp f x (Pat_aux (pe, ann)) =
     | Pat_exp (p, e) ->
         let x, e = f x e in
         (x, Pat_exp (p, e))
+    | Pat_or (ps, e) ->
+        let x, e = f x e in
+        (x, Pat_or (ps, e))
     | Pat_when (p, e1, e2) ->
         let x, e1 = f x e1 in
         let x, e2 = f x e2 in

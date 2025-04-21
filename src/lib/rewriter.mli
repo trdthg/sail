@@ -84,6 +84,8 @@ val rewrite_mpat : (tannot, env) rewriters -> tannot mpat -> tannot mpat
 
 val rewrite_pexp : (tannot, env) rewriters -> tannot pexp -> tannot pexp
 
+val rewrite_pexp_with_index : (tannot, env) rewriters -> int-> tannot pexp -> tannot pexp
+
 val rewrite_let : (tannot, env) rewriters -> tannot letbind -> tannot letbind
 
 val rewrite_def : (tannot, env) rewriters -> typed_def -> typed_def
@@ -187,6 +189,7 @@ type ( 'a,
   def_val_dec : 'exp -> 'opt_default_aux;
   def_val_aux : 'opt_default_aux * 'a annot -> 'opt_default;
   pat_exp : 'pat * 'exp -> 'pexp_aux;
+  pat_or : 'pat list * 'exp -> 'pexp_aux;
   pat_when : 'pat * 'exp * 'exp -> 'pexp_aux;
   pat_aux : 'pexp_aux * 'a annot -> 'pexp;
   lb_val : 'pat * 'exp -> 'letbind_aux;

@@ -660,6 +660,9 @@ let rec doc_match_clause (as_monadic : bool) ctx (Pat_aux (cl, l)) =
   match cl with
   | Pat_exp (pat, branch) ->
       group (nest 2 (string "| " ^^ doc_pat ~in_match:true pat ^^ string " => " ^^ wrap_exp as_monadic ctx branch))
+  | Pat_or (pats, branch) ->
+      let pats_doc = separate_map (comma ^^ space) (doc_pat ~in_match:true) pats in
+      group (nest 2 (string "| " ^^ pats_doc ^^ string " => " ^^ wrap_exp as_monadic ctx branch))
   | Pat_when (pat, when_, branch) -> failwith "The Lean backend does not support 'when' clauses in patterns"
 
 and wrap_exp as_monadic ctx e =

@@ -627,6 +627,8 @@ let rewrite_exp_remove_vector_concat_pat rewriters (E_aux (exp, (l, annot)) as f
         | Pat_aux (Pat_exp (pat, body), annot') ->
             let pat, _, decls = remove_vector_concat_pat pat in
             Pat_aux (Pat_exp (pat, decls (rewrite_rec body)), annot')
+        | Pat_aux (Pat_or (pats, body), annot') ->
+            raise (Reporting.err_unreachable l __POS__ "Pat_or should have been rewritten to Pat_when")
         | Pat_aux (Pat_when (pat, guard, body), annot') ->
             let pat, _, decls = remove_vector_concat_pat pat in
             Pat_aux (Pat_when (pat, decls (rewrite_rec guard), decls (rewrite_rec body)), annot')
@@ -1056,6 +1058,7 @@ let rec contains_bitvector_pat (P_aux (pat, annot)) =
 
 let contains_bitvector_pexp = function
   | Pat_aux (Pat_exp (pat, _), _) | Pat_aux (Pat_when (pat, _, _), _) -> contains_bitvector_pat pat
+  | Pat_aux (Pat_or (pats, _), _) -> List.exists contains_bitvector_pat pats
 
 (* Rewrite bitvector patterns to guarded patterns *)
 
@@ -1287,6 +1290,8 @@ let rewrite_exp_remove_bitvector_pat rewriters (E_aux (exp, (l, annot)) as full_
             | Some guard' -> Pat_aux (Pat_when (pat', guard', body'), annot')
             | None -> Pat_aux (Pat_exp (pat', body'), annot')
           )
+        | Pat_aux (Pat_or (pats, body), annot') ->
+            raise (Reporting.err_unreachable l __POS__ "Pat_or should have been rewritten to Pat_when")
         | Pat_aux (Pat_when (pat, guard, body), annot') -> (
             let pat', (guard', decls, _) = remove_bitvector_pat pat in
             let guard'' = rewrite_rec guard in
@@ -1444,6 +1449,8 @@ let rewrite_exp_guarded_pats rewriters (E_aux (exp, (l, annot)) as full_exp) =
       in
       let clause = function
         | Pat_aux (Pat_exp (pat, body), annot) -> (pat, None, rewrite_rec body, annot)
+        | Pat_aux (Pat_or (pat, body), annot) ->
+            raise (Reporting.err_unreachable l __POS__ "Pat_or should have been rewritten to Pat_when")
         | Pat_aux (Pat_when (pat, guard, body), annot) -> (pat, Some (rewrite_rec guard), rewrite_rec body, annot)
       in
       let clauses =
@@ -1464,6 +1471,8 @@ let rewrite_exp_guarded_pats rewriters (E_aux (exp, (l, annot)) as full_exp) =
       let e = rewrite_rec e in
       let clause = function
         | Pat_aux (Pat_exp (pat, body), annot) -> (pat, None, rewrite_rec body, annot)
+        | Pat_aux (Pat_or (pats, body), annot') ->
+            raise (Reporting.err_unreachable l __POS__ "Pat_or should have been rewritten away")
         | Pat_aux (Pat_when (pat, guard, body), annot) -> (pat, Some (rewrite_rec guard), rewrite_rec body, annot)
       in
       let clauses =
@@ -1652,15 +1661,19 @@ let rewrite_ast_early_return effect_info env ast =
   in
 
   let e_case (e, pes) =
-    let is_return_pexp (Pat_aux (pexp, _)) = match pexp with Pat_exp (_, e) | Pat_when (_, _, e) -> is_return e in
+    let is_return_pexp (Pat_aux (pexp, _)) =
+      match pexp with Pat_exp (_, e) | Pat_or (_, e) | Pat_when (_, _, e) -> is_return e
+    in
     let get_return_pexp (Pat_aux (pexp, a)) =
       match pexp with
       | Pat_exp (p, e) -> Pat_aux (Pat_exp (p, get_return e), a)
+      | Pat_or (ps, e) -> Pat_aux (Pat_or (ps, get_return e), a)
       | Pat_when (p, g, e) -> Pat_aux (Pat_when (p, g, get_return e), a)
     in
     let annot =
       match List.map get_return_pexp pes with
       | Pat_aux (Pat_exp (_, E_aux (_, annot)), _) :: _ -> annot
+      | Pat_aux (Pat_or (_, E_aux (_, annot)), _) :: _ -> annot
       | Pat_aux (Pat_when (_, _, E_aux (_, annot)), _) :: _ -> annot
       | [] -> (Parse_ast.Unknown, empty_tannot)
     in
@@ -1710,6 +1723,7 @@ let rewrite_ast_early_return effect_info env ast =
     | E_match (e, pes) ->
         let add_final_return_pexp = function
           | Pat_aux (Pat_exp (p, e), a) -> Pat_aux (Pat_exp (p, add_final_return true e), a)
+          | Pat_aux (Pat_or (p, e), a) -> Pat_aux (Pat_or (p, add_final_return true e), a)
           | Pat_aux (Pat_when (p, g, e), a) -> Pat_aux (Pat_when (p, g, add_final_return true e), a)
         in
         rewrap (E_match (e, List.map add_final_return_pexp pes))
@@ -1969,6 +1983,8 @@ let rewrite_split_fun_ctor_pats fun_name effect_info env ast =
                                match pexp with
                                | Pat_exp (pat, exp) ->
                                    FCL_aux (FCL_funcl (id, Pat_aux (Pat_exp (pat, optimize_exp exp), pann)), fannot)
+                               | Pat_or (pats, exp) ->
+                                   FCL_aux (FCL_funcl (id, Pat_aux (Pat_or (pats, optimize_exp exp), pann)), fannot)
                                | Pat_when (pat, guard, exp) ->
                                    FCL_aux
                                      ( FCL_funcl
@@ -2290,6 +2306,7 @@ let rewrite_ast_letbind_effects effect_info env =
    fun newreturn pexp k ->
     match pexp with
     | Pat_aux (Pat_exp (pat, exp), annot) -> k (Pat_aux (Pat_exp (pat, n_exp_term newreturn exp), annot))
+    | Pat_aux (Pat_or (pats, exp), annot) -> k (Pat_aux (Pat_or (pats, n_exp_term newreturn exp), annot))
     | Pat_aux (Pat_when (pat, guard, exp), annot) ->
         k (Pat_aux (Pat_when (pat, n_exp_term newreturn guard, n_exp_term newreturn exp), annot))
   and n_pexpL (newreturn : bool) (pexps : 'a pexp list) (k : 'a pexp list -> 'a exp) : 'a exp =
@@ -2600,6 +2617,9 @@ let rewrite_ast_pat_lits rewrite_lit env ast =
                 annot
               )
       end
+    | Pat_or (pats, exp) ->
+        let pats = List.map (fold_pat { id_pat_alg with p_aux = rewrite_pat }) pats in
+        Pat_aux (Pat_or (pats, exp), annot)
     | Pat_when (pat, guard, exp) -> begin
         let pat = fold_pat { id_pat_alg with p_aux = rewrite_pat } pat in
         let guard_annot = (fst annot, mk_tannot (env_of exp) bool_typ) in
@@ -2839,7 +2859,8 @@ let rec rewrite_var_updates (E_aux (expaux, ((l, _) as annot)) as exp) =
         let is_case = match expaux with E_match _ -> true | _ -> false in
         let vars, varpats =
           (* for E_match, e1 needs no rewriting after rewrite_ast_letbind_effects *)
-          (if is_case then [] else [e1]) @ List.map (fun (Pat_aux ((Pat_exp (_, e) | Pat_when (_, _, e)), _)) -> e) ps
+          (if is_case then [] else [e1])
+          @ List.map (fun (Pat_aux ((Pat_exp (_, e) | Pat_or (_, e) | Pat_when (_, _, e)), _)) -> e) ps
           |> List.map find_updated_vars |> List.fold_left IdSet.union IdSet.empty |> IdSet.inter used_vars
           |> mk_var_exps_pats pl env
         in
@@ -2849,6 +2870,7 @@ let rec rewrite_var_updates (E_aux (expaux, ((l, _) as annot)) as exp) =
             List.map
               (function
                 | Pat_aux (Pat_exp (p, e), a) -> Pat_aux (Pat_exp (p, rewrite_var_updates e), a)
+                | Pat_aux (Pat_or (ps, e), a) -> Pat_aux (Pat_or (ps, rewrite_var_updates e), a)
                 | Pat_aux (Pat_when (p, g, e), a) -> Pat_aux (Pat_when (p, g, rewrite_var_updates e), a)
                 )
               ps
@@ -2863,7 +2885,7 @@ let rec rewrite_var_updates (E_aux (expaux, ((l, _) as annot)) as exp) =
                 let exp = rewrite_var_updates (add_vars overwrite exp vars) in
                 let pannot = (l, mk_tannot (env_of exp) (typ_of exp)) in
                 Pat_aux (Pat_exp (pat, exp), pannot)
-            | Pat_when _ ->
+            | Pat_or _ | Pat_when _ ->
                 raise (Reporting.err_unreachable l __POS__ "Guarded patterns should have been rewritten already")
           in
           let ps = List.map rewrite_pexp ps in
@@ -3142,6 +3164,8 @@ let rewrite_ast_not_pats env =
     in
     match pexp_aux with
     | Pat_exp (pat, exp) -> rewrite_pexp' pat exp None
+    | Pat_or (pats, exp) ->
+        raise (Reporting.err_unreachable Parse_ast.Unknown __POS__ "Pat_or should have been rewritten to Pat_when")
     | Pat_when (pat, guard, exp) -> rewrite_pexp' pat exp (Some (strip_exp guard))
   in
   let rw_exp = { id_exp_alg with pat_aux = rewrite_pexp } in
@@ -3317,6 +3341,7 @@ let rewrite_ast_realize_mappings effect_info env ast =
   in
   let true_pexp = function
     | Pat_aux (Pat_exp (pat, _), annot) -> Pat_aux (Pat_exp (pat, mk_lit_exp L_true), annot)
+    | Pat_aux (Pat_or (pats, _), annot) -> Pat_aux (Pat_or (pats, mk_lit_exp L_true), annot)
     | Pat_aux (Pat_when (pat, guard, _), annot) -> Pat_aux (Pat_when (pat, guard, mk_lit_exp L_true), annot)
   in
   let annotate_pat ~last = function
@@ -3777,6 +3802,8 @@ module MakeExhaustive = struct
       | Pat_aux (Pat_exp (p, _), _) ->
           let rps, progress = List.split (List.map (remove_clause_from_pattern ctx p) rps) in
           (List.concat rps, List.exists (fun b -> b) progress)
+      | Pat_aux (Pat_or _, (l, _)) ->
+          raise (Reporting.err_unreachable l __POS__ "Or pattern should have been rewritten away")
       | Pat_aux (Pat_when _, (l, _)) ->
           raise (Reporting.err_unreachable l __POS__ "Guarded pattern should have been rewritten away")
 
@@ -3799,13 +3826,19 @@ module MakeExhaustive = struct
 
   let not_enum env id = match Env.lookup_id id env with Enum _ -> false | _ -> true
 
+  let paux_is_wild = function
+    | P_aux (P_wild, _) -> true
+    | P_aux (P_id id, ann) when not_enum (env_of_annot ann) id -> true
+    | _ -> false
+
   let pexp_is_wild = function
-    | Pat_aux (Pat_exp (P_aux (P_wild, _), _), _) -> true
-    | Pat_aux (Pat_exp (P_aux (P_id id, ann), _), _) when not_enum (env_of_annot ann) id -> true
+    | Pat_aux (Pat_exp (p, _), _) -> paux_is_wild p
+    | Pat_aux (Pat_or (ps, _), _) -> List.exists paux_is_wild ps
     | _ -> false
 
   let pexp_loc = function
     | Pat_aux (Pat_exp (P_aux (_, (l, _)), _), _) -> l
+    | Pat_aux (Pat_or (ps, _), (l, _)) -> l
     | Pat_aux (Pat_when (P_aux (_, (l, _)), _, _), _) -> l
 
   let funcl_is_wild = function FCL_aux (FCL_funcl (_, pexp), _) -> pexp_is_wild pexp
@@ -4702,6 +4735,7 @@ let all_rewriters =
     ("realize_mappings", base_rewriter rewrite_ast_realize_mappings);
     ("remove_duplicate_valspecs", basic_rewriter remove_duplicate_valspecs);
     ("toplevel_string_append", base_rewriter rewrite_ast_toplevel_string_append);
+    ("rewrite_pat_or2when", checking_rewriter (fun _ ast -> Type_error.check initial_env (strip_ast ast)));
     ("pat_string_append", basic_rewriter rewrite_ast_pat_string_append);
     ("mapping_patterns", basic_rewriter (fun _ -> Mappings.rewrite_ast));
     ("truncate_hex_literals", basic_rewriter rewrite_truncate_hex_literals);

@@ -47,7 +47,8 @@
   (:ast ast.lem))
  (action
   (progn
-   (run lem -ocaml %{ast}))))
+   (run lem -ocaml %{ast})))
+ (mode (promote)))
 
 (copy_files ../gen_lib/*.lem)
 

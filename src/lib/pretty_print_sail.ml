@@ -48,6 +48,7 @@ open Ast
 open Ast_defs
 open Ast_util
 open PPrint
+open Pretty_print_common
 
 module Big_int = Nat_big_num
 
@@ -609,6 +610,9 @@ module Printer (Config : PRINT_CONFIG) = struct
     let pexp_doc =
       match pat_aux with
       | Pat_exp (pat, exp) -> separate space [doc_pat pat; string "=>"; doc_exp exp]
+      | Pat_or (pats, exp) ->
+          let pats_doc = separate_map (space ^^ pipe ^^ space) doc_pat pats in
+          separate space [pats_doc; string "=>"; doc_exp exp]
       | Pat_when (pat, wh, exp) -> separate space [doc_pat pat; string "if"; doc_exp wh; string "=>"; doc_exp exp]
     in
     attrs_doc ^^ wrap pexp_doc
@@ -636,6 +640,9 @@ module Printer (Config : PRINT_CONFIG) = struct
     ^^
     match pexp with
     | Pat_exp (pat, exp) -> group (separate space [doc_id id; doc_pat pat; equals; doc_exp_as_block exp])
+    | Pat_or (pats, exp) ->
+        let pats_doc = separate_map (space ^^ pipe ^^ space) doc_pat pats in
+        group (separate space [doc_id id; pats_doc; equals; doc_exp_as_block exp])
     | Pat_when (pat, wh, exp) ->
         group
           (separate space

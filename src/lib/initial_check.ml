@@ -713,6 +713,9 @@ module KindInference = struct
     | P.Pat_exp (pat, exp) ->
         let* pat = infer_pat ctx pat in
         wrap (P.Pat_exp (pat, exp))
+    | P.Pat_or (pats, exp) ->
+        let* pats = mapM (infer_pat ctx) pats in
+        wrap (P.Pat_or (pats, exp))
     | P.Pat_when (pat, guard, exp) ->
         let* pat = infer_pat ctx pat in
         wrap (P.Pat_when (pat, guard, exp))
@@ -1423,6 +1426,7 @@ and to_ast_case ctx (P.Pat_aux (pexp_aux, l) : P.pexp) : uannot pexp =
       let annot = add_attribute l attr arg annot in
       Pat_aux (pexp, (pexp_l, annot))
   | P.Pat_exp (pat, exp) -> Pat_aux (Pat_exp (to_ast_pat ctx pat, to_ast_exp ctx exp), (l, empty_uannot))
+  | P.Pat_or (pats, exp) -> Pat_aux (Pat_or (List.map (to_ast_pat ctx) pats, to_ast_exp ctx exp), (l, empty_uannot))
   | P.Pat_when (pat, guard, exp) ->
       Pat_aux (Pat_when (to_ast_pat ctx pat, to_ast_exp ctx guard, to_ast_exp ctx exp), (l, empty_uannot))
 

@@ -4567,7 +4567,9 @@ let infer_funtyp l env tannotopt funcls =
       in
       match funcls with
       | [FCL_aux (FCL_funcl (_, Pat_aux (pexp, _)), _)] ->
-          let pat = match pexp with Pat_exp (pat, _) | Pat_when (pat, _, _) -> pat in
+          let pat =
+            match pexp with Pat_exp (pat, _) | Pat_when (pat, _, _) -> pat | Pat_or (pats, _) -> List.hd pats
+          in
           (* The function syntax lets us bind multiple function
              arguments with a single pattern, hence why we need to do
              this. But perhaps we don't want to allow this? *)

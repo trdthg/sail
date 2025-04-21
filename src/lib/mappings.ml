@@ -210,6 +210,7 @@ let wrap_some ~return_position exp =
    "<pat> => return <exp>" when in return position. *)
 let some_arm ~return_position = function
   | Pat_aux (Pat_exp (pat, exp), annot) -> Pat_aux (Pat_exp (pat, wrap_some ~return_position exp), annot)
+  | Pat_aux (Pat_or (pats, exp), annot) -> Pat_aux (Pat_or (pats, wrap_some ~return_position exp), annot)
   | Pat_aux (Pat_when (pat, guard, exp), annot) -> Pat_aux (Pat_when (pat, guard, wrap_some ~return_position exp), annot)
 
 (* Create an arm like "_ => None()" or "_ => ()" (when in return position) *)

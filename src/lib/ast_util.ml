@@ -897,6 +897,7 @@ and map_pexp_annot f (Pat_aux (pexp, annot)) = Pat_aux (map_pexp_annot_aux f pex
 
 and map_pexp_annot_aux f = function
   | Pat_exp (pat, exp) -> Pat_exp (map_pat_annot f pat, map_exp_annot f exp)
+  | Pat_or (pats, exp) -> Pat_or (List.map (map_pat_annot f) pats, map_exp_annot f exp)
   | Pat_when (pat, guard, exp) -> Pat_when (map_pat_annot f pat, map_exp_annot f guard, map_exp_annot f exp)
 
 and map_pat_annot f (P_aux (pat, annot)) = P_aux (map_pat_annot_aux f pat, f annot)
@@ -1306,6 +1307,9 @@ and string_of_fexp (FE_aux (FE_fexp (field, exp), _)) = string_of_id field ^ " =
 and string_of_pexp (Pat_aux (pexp, _)) =
   match pexp with
   | Pat_exp (pat, exp) -> string_of_pat pat ^ " => " ^ string_of_exp exp
+  | Pat_or (pats, exp) ->
+      let pat_strings = List.map (fun pat -> string_of_pat pat) pats in
+      String.concat ", " pat_strings ^ " => " ^ string_of_exp exp
   | Pat_when (pat, guard, exp) -> string_of_pat pat ^ " if " ^ string_of_exp guard ^ " => " ^ string_of_exp exp
 
 and string_of_typ_pat (TP_aux (tpat_aux, _)) =
@@ -1849,6 +1853,7 @@ and subst_pexp id value (Pat_aux (pexp_aux, annot)) =
     match pexp_aux with
     | Pat_exp (pat, exp) when IdSet.mem id (pat_ids pat) -> Pat_exp (pat, exp)
     | Pat_exp (pat, exp) -> Pat_exp (pat, subst id value exp)
+    | Pat_or (pats, exp) -> Pat_or (pats, subst id value exp)
     | Pat_when (pat, guard, exp) when IdSet.mem id (pat_ids pat) -> Pat_when (pat, guard, exp)
     | Pat_when (pat, guard, exp) -> Pat_when (pat, subst id value guard, subst id value exp)
   in
@@ -2082,6 +2087,7 @@ and locate_pexp : 'a. (l -> l) -> 'a pexp -> 'a pexp =
   let pexp_aux =
     match pexp_aux with
     | Pat_exp (pat, exp) -> Pat_exp (locate_pat f pat, locate f exp)
+    | Pat_or (pats, exp) -> Pat_or (List.map (locate_pat f) pats, locate f exp)
     | Pat_when (pat, guard, exp) -> Pat_when (locate_pat f pat, locate f guard, locate f exp)
   in
   Pat_aux (pexp_aux, (f l, annot))
@@ -2343,6 +2349,7 @@ struct
     else (
       match aux with
       | Pat_exp (pat, exp) -> option_chain (find_annot_pat sl pat) (find_annot_exp sl exp)
+      | Pat_or (pats, exp) -> option_chain (find_annot_pat sl (List.hd pats)) (find_annot_exp sl exp)
       | Pat_when (pat, guard, exp) -> option_chain (find_annot_pat sl pat) (option_mapm (find_annot_exp sl) [guard; exp])
     )
 

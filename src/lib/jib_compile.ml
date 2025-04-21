@@ -2189,6 +2189,9 @@ module Make (C : CONFIG) = struct
     | DEF_fundef (FD_aux (FD_function (_, _, [FCL_aux (FCL_funcl (id, Pat_aux (Pat_exp (pat, exp), _)), _)]), _)) ->
         Util.progress "Compiling " (string_of_id id) n total;
         compile_funcl ctx def_annot id pat None exp
+    | DEF_fundef (FD_aux (FD_function (_, _, [FCL_aux (FCL_funcl (id, Pat_aux (Pat_or (pats, exp), (l, _))), _)]), _))
+      ->
+        raise (Reporting.err_general l "Encountered function with no clauses")
     | DEF_fundef (FD_aux (FD_function (_, _, [FCL_aux (FCL_funcl (id, Pat_aux (Pat_when (pat, guard, exp), _)), _)]), _))
       ->
         Util.progress "Compiling " (string_of_id id) n total;

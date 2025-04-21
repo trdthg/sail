@@ -607,6 +607,8 @@ let const_props target ast =
       FE_aux (FE_fexp (id, fst (const_prop_exp substs assigns e)), annot)
     and const_prop_pexp substs assigns = function
       | Pat_aux (Pat_exp (p, e), l) -> Pat_aux (Pat_exp (p, fst (const_prop_exp (remove_bound substs p) assigns e)), l)
+      | Pat_aux (Pat_or (ps, e), l) ->
+          Pat_aux (Pat_or (ps, fst (const_prop_exp (List.fold_left remove_bound substs ps) assigns e)), l)
       | Pat_aux (Pat_when (p, e1, e2), l) ->
           let substs' = remove_bound substs p in
           let e1', assigns = const_prop_exp substs' assigns e1 in
@@ -832,6 +834,7 @@ let const_props target ast =
               end
             | GiveUp -> None
           end
+        | Pat_aux (Pat_or (ps, exp), _) :: tl -> None (* TODO *)
         | Pat_aux (Pat_exp (p, exp), _) :: tl -> (
             match check_pat p with
             | DoesNotMatch -> findpat_generic description assigns tl

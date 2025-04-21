@@ -640,6 +640,7 @@ let apply_pat_choices choices =
                 E_let (LB_aux (LB_val (P_aux (P_id id, dummyannot), e'), dummyannot), E_aux (e, dummyannot))
               )
               e subst
+        | Pat_aux (Pat_or _, (l, _)) -> raise (Reporting.err_unreachable l __POS__ "Pat_or should be rewritted away!")
         | Pat_aux (Pat_when _, (l, _)) ->
             raise (Reporting.err_unreachable l __POS__ "Pattern acquired a guard after analysis!")
         | exception Not_found ->
@@ -1151,6 +1152,8 @@ let split_defs target all_errors (splits : split_req list) env ast =
                   )
                   patnsubsts
           )
+        | Pat_aux (Pat_or (ps, e), (l, _)) ->
+            Reporting.unreachable l __POS__ "match or pattern should be removed before monomorphisation"
         | Pat_aux (Pat_when (p, e1, e2), l) -> (
             let nosplit = lazy [Pat_aux (Pat_when (p, map_exp e1, map_exp e2), l)] in
             match map_pat p with
@@ -2088,7 +2091,10 @@ module Analysis = struct
           | [((id', loc), Total)], true, true when Id.compare id id' == 0 -> (
               match
                 Util.map_all
-                  (function Pat_aux (Pat_exp (pat, _), _) -> Some (ctx pat) | Pat_aux (Pat_when (_, _, _), _) -> None)
+                  (function
+                    | Pat_aux (Pat_exp (pat, _), _) -> Some (ctx pat)
+                    | Pat_aux (Pat_or (_, _), _) | Pat_aux (Pat_when (_, _, _), _) -> None
+                    )
                   pexps
               with
               | Some pats ->
@@ -2357,6 +2363,15 @@ module Analysis = struct
                 let d, assigns, r = analyse_sub env assigns e1 in
                 let assigns = add_dep_to_assigned deps assigns [e1] in
                 (d, assigns, r)
+            | Pat_or (pats, e1) ->
+                let env =
+                  List.fold_left
+                    (fun env pat -> update_env env (Unknown (l, "Exception")) pat (env_of_annot (l, annot)) (env_of e1))
+                    env pats
+                in
+                let d, assigns, r = analyse_sub env assigns e1 in
+                let assigns = add_dep_to_assigned deps assigns [e1] in
+                (d, assigns, r)
             | Pat_when (pat, e1, e2) ->
                 let env = update_env env deps pat (env_of_annot (l, annot)) (env_of e2) in
                 let d1, assigns, r1 = analyse_sub env assigns e1 in
@@ -2448,6 +2463,15 @@ module Analysis = struct
             match pexp with
             | Pat_exp (pat, e1) ->
                 let env = update_env env (Unknown (l, "Exception")) pat (env_of_annot (l, annot)) (env_of e1) in
+                let d, assigns, r = analyse_sub env assigns e1 in
+                let assigns = add_dep_to_assigned deps assigns [e1] in
+                (d, assigns, r)
+            | Pat_or (pats, e1) ->
+                let env =
+                  List.fold_left
+                    (fun env pat -> update_env env (Unknown (l, "Exception")) pat (env_of_annot (l, annot)) (env_of e1))
+                    env pats
+                in
                 let d, assigns, r = analyse_sub env assigns e1 in
                 let assigns = add_dep_to_assigned deps assigns [e1] in
                 (d, assigns, r)
@@ -2982,6 +3006,9 @@ let add_extra_splits extras defs =
           | Pat_exp (p, e) ->
               let e', sp = add_to_body extras e in
               (Pat_exp (p, e'), sp)
+          | Pat_or (ps, e) ->
+              let e', sp = add_to_body extras e in
+              (Pat_or (ps, e'), sp)
           | Pat_when (p, g, e) ->
               let e', sp = add_to_body extras e in
               (Pat_when (p, g, e'), sp)

@@ -513,6 +513,7 @@ module Generator (Converter : Markdown.CONVERTER) (Config : CONFIG) = struct
       match pexp with
       | Pat_aux (Pat_exp (pat, exp), _) -> (pat, None, exp)
       | Pat_aux (Pat_when (pat, guard, exp), _) -> (pat, Some guard, exp)
+      | _ -> raise (Reporting.err_general (fst annot).loc "Pat_or should be re-written")
     in
     let guard_source =
       Option.map (fun exp -> doc_loc (exp_loc exp) Type_check.strip_exp Reformatter.doc_exp exp) guard
@@ -563,8 +564,11 @@ module Generator (Converter : Markdown.CONVERTER) (Config : CONFIG) = struct
   let docinfo_for_mpexp (MPat_aux (aux, _)) =
     match aux with MPat_pat mpat -> pat_of_mpat mpat | MPat_when (mpat, _) -> pat_of_mpat mpat
 
-  let docinfo_for_pexp (Pat_aux (aux, _)) =
-    match aux with Pat_exp (pat, body) -> (pat, body) | Pat_when (pat, _, body) -> (pat, body)
+  let docinfo_for_mapcl_pexp (Pat_aux (aux, (l, _))) =
+    match aux with
+    | Pat_exp (pat, body) -> (pat, body)
+    | Pat_or (pats, body) -> raise (Reporting.err_general l "Pat_or should be re-written")
+    | Pat_when (pat, _, body) -> (pat, body)
 
   let docinfo_for_mapcl n (MCL_aux (aux, (def_annot, _)) as clause) =
     let source = doc_loc def_annot.loc Type_check.strip_mapcl Reformatter.doc_mapcl clause in
@@ -580,12 +584,12 @@ module Generator (Converter : Markdown.CONVERTER) (Config : CONFIG) = struct
           let right_wavedrom = Wavedrom.of_pattern ~labels:wavedrom_attr right in
           (Some left, left_wavedrom, Some right, right_wavedrom, None)
       | MCL_forwards pexp ->
-          let left, body = docinfo_for_pexp pexp in
+          let left, body = docinfo_for_mapcl_pexp pexp in
           let left_wavedrom = Wavedrom.of_pattern ~labels:wavedrom_attr left in
           let body = doc_loc (exp_loc body) Type_check.strip_exp Reformatter.doc_exp body in
           (Some left, left_wavedrom, None, None, Some body)
       | MCL_backwards pexp ->
-          let right, body = docinfo_for_pexp pexp in
+          let right, body = docinfo_for_mapcl_pexp pexp in
           let right_wavedrom = Wavedrom.of_pattern ~labels:wavedrom_attr right in
           let body = doc_loc (exp_loc body) Type_check.strip_exp Reformatter.doc_exp body in
           (None, None, Some right, right_wavedrom, Some body)

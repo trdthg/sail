@@ -378,6 +378,7 @@ and ocaml_pexps ctx = function
 and ocaml_pexp ctx = function
   | Pat_aux (Pat_exp (pat, exp), _) ->
       separate space [bar; ocaml_pat ctx pat; string "->"] ^//^ group (ocaml_exp ctx exp)
+  | Pat_aux (Pat_or (pats, exp), (l, _)) -> raise (Reporting.err_todo l "Pat_or should be re-written")
   | Pat_aux (Pat_when (pat, wh, exp), _) ->
       separate space [bar; ocaml_pat ctx pat; string "when"; ocaml_atomic_exp ctx wh; string "->"]
       ^//^ group (ocaml_exp ctx exp)
@@ -608,6 +609,7 @@ let ocaml_funcls ctx =
         let pat, guard, exp =
           match pexp with
           | Pat_aux (Pat_exp (pat, exp), _) -> (pat, None, exp)
+          | Pat_aux (Pat_or _, (l, _)) -> raise (Reporting.err_todo l "Pat_or should be re-written")
           | Pat_aux (Pat_when (pat, guard, exp), _) -> (pat, Some guard, exp)
         in
         let ocaml_guarded_exp ctx exp = function
