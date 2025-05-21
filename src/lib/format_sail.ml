@@ -56,6 +56,92 @@ let rec map_last f = function
       let x = f false x in
       x :: map_last f xs
 
+let is_sep_point op = Util.list_contains op ["&&"; "||"; "&"; "|"; "^"; "@"]
+
+(* single chunk *)
+let is_spacer = function Spacer _ -> true | _ -> false
+let is_comment = function Comment (_, _, _, _, _) | Doc_comment _ -> true | _ -> false
+let is_block = function Block (_, _) -> true | _ -> false
+let is_match = function Match _ -> true | _ -> false
+let is_struct = function Struct_update _ -> true | _ -> false
+let is_tuple = function Tuple _ -> true | _ -> false
+let is_let = function Binder (_, _, _, _) -> true | _ -> false
+let is_delim = function Delim _ | Opt_delim _ -> true | _ -> false
+let is_binary = function Binary _ -> true | _ -> false
+let is_op = function Binary _ -> true | Ternary _ | Infix_sequence _ -> true | _ -> false
+let is_if_then_else = function If_then_else _ -> true | _ -> false
+let is_if_then = function If_then _ -> true | _ -> false
+
+(* single chunk extra *)
+let is_spacer_space = function Spacer (false, _) -> true | _ -> false
+let is_spacer_hardline = function Spacer (true, _) -> true | _ -> false
+let is_blcok_comment = function Comment (Lexer.Comment_block, _, _, _, _) -> true | _ -> false
+let is_if_stmt chunk = is_if_then_else chunk || is_if_then chunk
+let is_block_like chunk = is_block chunk || is_match chunk || is_tuple chunk
+
+(* multiple chunks *)
+let rec is_chunks_match ?(tl_rule = fun c -> is_delim c) ?(skip_hd_rule = is_comment) hd_rule chunks =
+  let skip_index = ref 0 in
+  let acc, _ =
+    Queue.fold
+      (fun (acc, i) chunk ->
+        let res =
+          match i with
+          | i when i = !skip_index ->
+              if skip_hd_rule chunk then (
+                skip_index := !skip_index + 1;
+                acc
+              )
+              else hd_rule chunk
+          | _ -> acc && tl_rule chunk
+        in
+        (res, i + 1)
+      )
+      (false, 0) chunks
+  in
+  acc
+
+let rec is_chunks_block_like =
+  is_chunks_match ~tl_rule:(fun c -> is_delim c || is_blcok_comment c || is_spacer c) is_block_like
+
+let rec is_chunks_match_and ?(skip_hd_rule = is_comment) hd_rule chunks =
+  let skip_index = ref 0 in
+  let acc, _ =
+    Queue.fold
+      (fun ((acc, tl), i) chunk ->
+        let res =
+          match i with
+          | i when i = !skip_index ->
+              if skip_hd_rule chunk then (
+                skip_index := !skip_index + 1;
+                (acc, tl)
+              )
+              else (hd_rule chunk, tl)
+          | _ -> (acc, tl @ [chunk])
+        in
+        (res, i + 1)
+      )
+      ((false, []), 0)
+      chunks
+  in
+  acc
+
+let rec is_chunks_block_like_and = is_chunks_match_and is_block_like
+
+let rec is_chunks_if_then_else =
+  is_chunks_match ~tl_rule:(fun c -> is_delim c || is_blcok_comment c || is_spacer c) is_if_then_else
+
+let find_rtrim_index match_rule chunks =
+  let acc, _ =
+    Queue.fold
+      (fun (acc, i) chunk ->
+        let acc = if not (match_rule chunk) then i + 1 else i in
+        (acc, i + 1)
+      )
+      (0, 0) chunks
+  in
+  acc
+
 (* Remove additional (> 1) trailing newlines at the end of a string *)
 let discard_extra_trailing_newlines s =
   let len = String.length s in
@@ -351,9 +437,10 @@ let softline = break 0
 let prefix_parens n x y =
   x ^^ ifflat space (space ^^ char '(') ^^ nest n (softline ^^ y) ^^ softline ^^ ifflat empty (char ')')
 
-let surround_hardline h n b opening contents closing =
+let surround_hardline ?(nogroup = false) h n b opening contents closing =
   let b = if h then hardline else break b in
-  group (opening ^^ nest n (b ^^ contents) ^^ b ^^ closing)
+  let doc = opening ^^ nest n (b ^^ contents) ^^ b ^^ closing in
+  if nogroup then doc else group doc
 
 type config = { indent : int; preserve_structure : bool; line_width : int; ribbon_width : float }
 
@@ -413,51 +500,193 @@ module type CONFIG = sig
   val config : config
 end
 
-let rec can_chunks_list_wrap cqs =
-  match cqs with
-  | [] -> true
-  | [cq] -> (
-      match List.of_seq (Queue.to_seq cq) with
-      | [] -> true
-      | [c] -> (
+module WrapChecker = struct
+  type opt = { strict : bool; in_braces : bool }
+
+  let opt_strict opt = { opt with strict = true }
+
+  let opt_in_braces opt = { opt with in_braces = true }
+
+  let default_opt = { strict = false; in_braces = false }
+
+  let rec check_nowrap opt c =
+    match c with
+    | Delim _ | Opt_delim _ -> true
+    | Atom _ | String_literal _ ->
+        (* Atom *)
+        true
+    | Spacer (newline, n) -> not newline
+    | Field (cq, id) ->
+        (* zero_extend(fcsr.bits) *)
+        check_chunks_list_nowrap ~opt [cq]
+    | Unary (_, cq) ->
+        (* (return 1) *)
+        check_chunks_list_nowrap ~opt [cq]
+    | Chunks cq -> check_chunks_nowrap opt cq
+    | Block (_, cqs) ->
+        (* {{{ Atom }}} *)
+        List.length cqs <= 1 && check_chunks_list_nowrap ~opt:(opt |> opt_in_braces) cqs
+    | Infix_sequence infix_chunks ->
+        (* i + rs1_val < VLMAX *)
+        List.fold_left
+          (fun res c ->
+            match c with
+            | Infix_prefix s | Infix_op s -> res
+            | Infix_chunks cs -> res && check_chunks_list_nowrap ~opt [cs]
+          )
+          true infix_chunks
+    | Binary (x, op, y) ->
+        (* (v128 >> shift)[64..0] *)
+        check_chunks_list_nowrap ~opt [x] && check_chunks_list_nowrap ~opt [y]
+    | Intersperse (op, chunks) ->
+        (* foo @ bar *)
+        check_chunks_list_nowrap ~opt chunks
+    | Index (cq, ix) ->
+        (* regval[31..16] *)
+        let opt = opt |> opt_in_braces in
+        check_chunks_list_nowrap ~opt [cq] && check_chunks_list_nowrap ~opt [ix]
+    | App (_, cqs) ->
+        (* func(foo) *)
+        (* FIXME: should we mark it as in_braces? *)
+        check_chunks_list_nowrap ~opt:(opt |> opt_in_braces) cqs
+    | Struct_update (exps, fexps) ->
+        (* struct { variety = AV_exclusive } *)
+        check_chunks_list_nowrap ~opt [exps] && check_chunks_list_nowrap ~opt fexps
+    | Vector_updates (cq, cs) ->
+        (* [foo with a = 1, b = 2] *)
+        check_chunks_list_nowrap ~opt [cq] && List.fold_left (fun res c -> res && check_nowrap opt c) true cs
+    | Ternary (x, op1, y, op2, z) ->
+        (* with 37..36 = 0b00 *)
+        check_chunks_list_nowrap ~opt [x] && check_chunks_list_nowrap ~opt [y] && check_chunks_list_nowrap ~opt [z]
+    | Tuple (_, _, _, cqs) -> (* (1, 2) *) check_chunks_list_nowrap ~opt:(opt |> opt_in_braces) cqs
+    | If_then (_, i, t) -> check_chunks_list_nowrap ~opt [i] && check_chunks_list_nowrap ~opt [t]
+    | If_then_else (_, i, t, e) ->
+        (* if (a > 1) then {1} else {2} *)
+        check_chunks_list_nowrap ~opt [i] && check_chunks_list_nowrap ~opt [t] && check_chunks_list_nowrap ~opt [e]
+    | Comment (Comment_line, _, _, _, trailing) ->
+        (* case => (), // comment *)
+        (* then 2 // comment *)
+        opt.in_braces || trailing
+    | Comment (Comment_block, _, _, _, trailing) -> (trailing && not opt.in_braces) || (opt.in_braces && not trailing)
+    (* | Comment (Comment_line, _, _, _, true) ->
+           (* case => (), // comment *)
+           (* then 2 // comment *)
+           not opt.in_braces
+       | Comment (Comment_block, _, _, _, trailing) -> not opt.in_braces *)
+    | _ -> false
+
+  and check_nowrap_extra last_check opt c =
+    match c with
+    | Comment (Comment_block, _, _, _, _) -> not opt.in_braces
+    | Comment _ ->
+        if not last_check then false
+        else (
           match c with
-          (* Atom is ok *)
-          | Atom _ -> true
-          (* {{{ Atom }}} is ok *)
-          | Block (_, exps) -> can_chunks_list_wrap exps
-          | If_then_else (_, i, t, e) -> can_chunks_list_wrap [t; e]
+          | Comment (Comment_line, _, _, _, true) ->
+              (* case => (), // comment *)
+              (* then 2 // comment *)
+              not opt.in_braces
+          | Comment (Comment_block, _, _, _, _) -> true
           | _ -> false
         )
-      | c :: cq ->
-          can_chunks_list_wrap [Queue.of_seq (List.to_seq [c])] && can_chunks_list_wrap [Queue.of_seq (List.to_seq cq)]
-    )
-  | cq :: cqs -> can_chunks_list_wrap [cq] && can_chunks_list_wrap cqs
+    | _ -> false
+
+  and check_chunks_nowrap opt cq =
+    let len = Queue.length cq in
+    let res, _ =
+      Queue.fold
+        (fun (acc, index) c ->
+          let res =
+            if
+              (* unit => (), *)
+              is_delim c
+            then true
+            else (
+              (* strict rule, for nested chunks *)
+              let res = check_nowrap opt c in
+              res
+              (* if opt.strict then res
+                 else (
+                   let last_chunk = index = len - 1 in
+                   res || check_nowrap_extra last_chunk opt c
+                 ) *)
+            )
+          in
+          (acc && res, index + 1)
+        )
+        (true, 0) cq
+    in
+    res
+
+  and check_chunks_list_nowrap ?(opt = default_opt) cqs =
+    match cqs with
+    | [] -> true
+    | [cq] -> check_chunks_nowrap opt cq
+    | cq :: cqs -> check_chunks_nowrap opt cq && check_chunks_list_nowrap ~opt cqs
+
+  and check_chunks_wrap ?(opt = default_opt) cqs = not (check_chunks_list_nowrap ~opt cqs)
+end
 
 module Make (Config : CONFIG) = struct
   let indent = Config.config.indent
   let preserve_structure = Config.config.preserve_structure
 
-  let rec doc_chunk ?(ungroup_tuple = false) ?(toplevel = false) opts = function
+  let chunks_of_chunk c =
+    let q = Queue.create () in
+    Queue.add c q;
+    q
+
+  type rhs_t = Binary | Function | MatchCase | ThenElseNoBrace
+
+  type opt = { ungroup_tuple : bool; ungroup_block : bool; toplevel : bool; wrap : bool; rhs : rhs_t option }
+
+  let default_opt = { ungroup_tuple = false; ungroup_block = false; toplevel = false; wrap = false; rhs = None }
+
+  let opt_ungroup_tuple opt = { opt with ungroup_tuple = true }
+  let opt_toplevel opt = { opt with toplevel = true }
+  let opt_wrap opt = { opt with wrap = true }
+  let opt_binary_rhs opt = { opt with rhs = Some Binary }
+  let opt_function_rhs opt = { opt with rhs = Some Function }
+  let opt_matchcase_rhs opt = { opt with rhs = Some MatchCase }
+  let opt_thenelse_no_brace_rhs opt = { opt with rhs = Some ThenElseNoBrace }
+  let opt_ungroup_block opt = { opt with ungroup_block = true }
+
+  let rec doc_chunk ?(opt = default_opt) opts = function
     | Atom s -> string s
-    | Chunks chunks -> doc_chunks opts chunks
+    | Chunks chunks ->
+        Printf.printf "Chunks\n";
+        doc_chunks_rhs opts chunks
     | Delim s -> string s ^^ space
     | Opt_delim s -> opt_delim s
     | String_literal s -> utf8string ("\"" ^ String.escaped s ^ "\"")
     | App (id, args) ->
         doc_id id
         ^^ group
-             (surround indent 0 (char '(')
-                (separate_map softline (doc_chunks (opts |> nonatomic |> expression_like)) args)
-                (char ')')
+             ( if Util.list_empty args then (* avoid `let foo = bar(\n)` *)
+                 string "()"
+               else
+                 surround indent 0 (char '(')
+                   (separate_map softline (doc_chunks_rhs (opts |> nonatomic |> expression_like)) args)
+                   (char ')')
              )
     | Tuple (l, r, spacing, args) ->
-        let group_fn = if ungroup_tuple then fun x -> x else group in
+        let group_fn = if opt.ungroup_tuple then fun x -> x else group in
         group_fn
-          (surround indent spacing (string l) (separate_map softline (doc_chunks (nonatomic opts)) args) (string r))
+          (surround indent spacing (string l)
+             (separate_map softline
+                (fun c ->
+                  let res = doc_chunks_rhs (nonatomic opts) c in
+                  res
+                )
+                args
+             )
+             (string r)
+          )
     | Intersperse (op, args) ->
+        Printf.printf "Intersperse\n";
         let outer_prec, prec = intersperse_operator_precedence op in
         let doc =
-          group (separate_map (space ^^ string op ^^ space) (doc_chunks (opts |> prec |> expression_like)) args)
+          group (separate_map (space ^^ string op ^^ space) (doc_chunks_rhs (opts |> prec |> expression_like)) args)
         in
         if outer_prec > opts.precedence then parens doc else doc
     | Spacer (line, n) -> if line then repeat n hardline else repeat n space
@@ -467,55 +696,161 @@ module Make (Config : CONFIG) = struct
         if outer_prec > opts.precedence then parens doc else doc
     | Infix_sequence infix_chunks ->
         let outer_prec = max_precedence infix_chunks in
+        let chunks_count = ref 0 in
+
+        let op = ref None in
+        let prefix = ref None in
         let doc =
-          separate_map empty
-            (function
-              | Infix_prefix op -> string op
-              | Infix_op op -> space ^^ string op ^^ space
-              | Infix_chunks chunks -> doc_chunks (opts |> atomic |> expression_like) chunks
-              )
-            infix_chunks
+          List.fold_left
+            (fun acc c ->
+              match c with
+              | Infix_prefix p ->
+                  prefix := Some (String.trim p);
+                  acc
+              | Infix_chunks cs ->
+                  chunks_count := !chunks_count + 1;
+                  let doc = doc_chunks (opts |> atomic |> expression_like) cs in
+                  let doc =
+                    match !prefix with
+                    | Some p ->
+                        let p = if String.length p = 1 then p else p ^ " " in
+                        string p ^^ doc
+                    | None -> doc
+                  in
+                  let doc =
+                    match !op with
+                    | Some op ->
+                        let sep_op_chunk =
+                          ifflat space (if is_sep_point op then hardline ^^ repeat indent space else space)
+                        in
+                        sep_op_chunk ^^ string op ^^ space ^^ group doc
+                    | None -> doc
+                  in
+                  op := None;
+                  prefix := None;
+                  acc ^^ doc
+              | Infix_op o ->
+                  op := Some o;
+                  acc
+            )
+            empty infix_chunks
         in
+        let doc = group doc in
         if outer_prec > opts.precedence then parens doc else doc
     | Binary (lhs, op, rhs) ->
         let outer_prec, lhs_prec, rhs_prec, spacing = operator_precedence op in
+        let doc_l = doc_chunks_rhs (opts |> lhs_prec |> expression_like) lhs in
+        let doc_r = doc_chunks_rhs ~opt:(default_opt |> opt_binary_rhs) (opts |> rhs_prec |> expression_like) rhs in
+        let sep = repeat spacing space in
         let doc =
-          infix indent spacing (string op)
-            (doc_chunks (opts |> lhs_prec |> expression_like) lhs)
-            (doc_chunks (opts |> rhs_prec |> expression_like) rhs)
+          group
+            ( if is_sep_point op then (
+                let doc_r = string op ^^ sep ^^ group doc_r in
+                doc_l ^^ group (ifflat (sep ^^ doc_r) (nest indent (hardline ^^ doc_r)))
+              )
+              else (
+                Printf.printf "this way2\n";
+                doc_l ^^ sep ^^ string op ^^ sep ^^ doc_r
+              )
+            )
         in
         if outer_prec > opts.precedence then parens doc else doc
     | Ternary (x, op1, y, op2, z) ->
         let outer_prec, x_prec, y_prec, z_prec = ternary_operator_precedence (op1, op2) in
         let doc =
-          prefix indent 1
+          let sep_op1 = if op1 = ".." then empty else space in
+          group
             (doc_chunks (opts |> x_prec |> expression_like) x
-            ^^ space ^^ string op1 ^^ space
+            ^^ sep_op1 ^^ string op1 ^^ sep_op1
             ^^ doc_chunks (opts |> y_prec |> expression_like) y
-            ^^ space ^^ string op2
+            ^^ space ^^ string op2 ^^ break 1
             )
-            (doc_chunks (opts |> z_prec |> expression_like) z)
+          ^^ doc_chunks_rhs (opts |> z_prec |> expression_like) z
         in
         if outer_prec > opts.precedence then parens doc else doc
     | If_then_else (bracing, i, t, e) ->
         let insert_braces = opts.statement || bracing.then_brace || bracing.else_brace in
-        let i = doc_chunks (opts |> nonatomic |> expression_like) i in
-        let t =
-          if insert_braces && (not preserve_structure) && not bracing.then_brace then doc_chunk opts (Block (true, [t]))
-          else doc_chunks (opts |> nonatomic |> expression_like) t
+        let i_doc = doc_chunks_rhs ~opt (opts |> nonatomic |> expression_like) i in
+        let check_opt = WrapChecker.default_opt |> WrapChecker.opt_strict in
+        (* if any one can't wrap, then then and else block will expand *)
+        let force_wrap =
+          ( match opt.rhs with
+          | None -> true
+          | Some Binary | Some MatchCase | Some ThenElseNoBrace -> false
+          | Some Function -> false
+          )
+          || WrapChecker.check_chunks_wrap ~opt:check_opt [t]
+          || WrapChecker.check_chunks_wrap ~opt:check_opt [e]
         in
-        let e =
-          if insert_braces && (not preserve_structure) && not bracing.else_brace then doc_chunk opts (Block (true, [e]))
-          else doc_chunks (opts |> nonatomic |> expression_like) e
+        let t, t_brace =
+          if insert_braces && (not preserve_structure) && not bracing.then_brace then
+            (chunks_of_chunk (Block (true, [t])), true)
+          else (t, bracing.then_brace)
         in
-        separate space [string "if"; i; string "then"; t; string "else"; e] |> atomic_parens opts
+        let e, e_brace =
+          if insert_braces && (not preserve_structure) && not bracing.else_brace then
+            (chunks_of_chunk (Block (true, [e])), true)
+          else (e, bracing.else_brace)
+        in
+        let doc_chunks_exp ~brace =
+          doc_chunks_rhs
+            ~opt:
+              {
+                default_opt with
+                (* when line longer than line_width, then and else both wrap *)
+                ungroup_block = true;
+                (* force wrap *)
+                wrap = force_wrap;
+                (* if rhs, then nowrap, or nest with hardline *)
+                rhs = (if not brace then Some ThenElseNoBrace else None);
+              }
+            (opts |> nonatomic |> expression_like)
+        in
+        let t_doc = doc_chunks_exp ~brace:insert_braces t in
+        let e_doc = doc_chunks_exp ~brace:insert_braces e in
+        let doc_i = separate space [string "if"; i_doc] in
+        let doc_t = separate space [string "then"; t_doc] in
+        let doc_e = separate space [string "else"; e_doc] in
+        let res =
+          ifflat
+            (doc_i ^^ space ^^ doc_t ^^ space ^^ doc_e |> atomic_parens opts)
+            (let doc =
+               if insert_braces then
+                 (*
+                     if foo then {
+                       ...
+                     } else {
+                       ...
+                     }
+                  *)
+                 group (doc_i ^^ break 1) ^^ doc_t ^^ space ^^ doc_e
+               else
+                 (*
+                     if ...
+                     then ...
+                     else ...
+                  *)
+                 doc_i ^^ hardline ^^ doc_t ^^ hardline ^^ doc_e
+             in
+             let doc = doc |> atomic_parens opts in
+             (*
+                 let a =
+                   if_stmt...
+              *)
+             if Option.is_some opt.rhs then nest indent (hardline ^^ doc) else doc
+            )
+        in
+        group res
     | If_then (bracing, i, t) ->
-        let i = doc_chunks (opts |> nonatomic |> expression_like) i in
+        let i = doc_chunks_rhs ~opt:default_opt (opts |> nonatomic |> expression_like) i in
         let t =
           if opts.statement && (not preserve_structure) && not bracing then doc_chunk opts (Block (true, [t]))
-          else doc_chunks (opts |> nonatomic |> expression_like) t
+          else doc_chunks_rhs (opts |> nonatomic |> expression_like) t
         in
-        separate space [string "if"; i; string "then"; t] |> atomic_parens opts
+        if bracing then
+          group (group (string "if" ^^ space ^^ i ^^ ifflat space hardline) ^^ string "then" ^^ space ^^ t)
+          |> atomic_parens opts
+        else group (string "if" ^^ space ^^ i ^^ string "then" ^^ t) |> atomic_parens opts
     | Vector_updates (exp, updates) ->
         let opts = opts |> nonatomic |> expression_like in
         let exp_doc = doc_chunks opts exp in
@@ -525,9 +860,10 @@ module Make (Config : CONFIG) = struct
           (char ']')
         |> atomic_parens opts
     | Index (exp, ix) ->
-        let exp_doc = doc_chunks (opts |> atomic |> expression_like) exp in
-        let ix_doc = doc_chunks (opts |> nonatomic |> expression_like) ix in
-        exp_doc ^^ surround indent 0 (char '[') ix_doc (char ']') |> subatomic_parens opts
+        let exp_doc = doc_chunks_rhs (opts |> atomic |> expression_like) exp in
+        let exp_doc = group (empty ^^ nest indent exp_doc ^^ empty) in
+        let ix_doc = doc_chunks_nowrap_or_surround (opts |> nonatomic |> expression_like) ix in
+        exp_doc ^^ char '[' ^^ ix_doc ^^ char ']' |> subatomic_parens opts
     | Exists ex ->
         let ex_doc =
           doc_chunks (atomic opts) ex.vars
@@ -540,16 +876,16 @@ module Make (Config : CONFIG) = struct
     | Function_typ ft ->
         separate space
           [
-            group (doc_chunks opts ft.lhs);
+            group (doc_chunks_rhs opts ft.lhs);
             (if ft.mapping then string "<->" else string "->");
-            group (doc_chunks opts ft.rhs);
+            group (doc_chunks_rhs opts ft.rhs);
           ]
     | Typ_quant typq ->
         group
           (align
              (string "forall" ^^ space
              ^^ nest 2
-                  (doc_chunks opts typq.vars
+                  (doc_chunks_rhs opts typq.vars
                   ^^
                   match typq.constr_opt with
                   | None -> char '.'
@@ -557,12 +893,12 @@ module Make (Config : CONFIG) = struct
                   )
              )
           )
-        ^^ break 1
+        ^^ break 0
     | Struct_update (exp, fexps) ->
         surround indent 1 (char '{')
           (doc_chunks opts exp ^^ space ^^ string "with" ^^ break 1 ^^ separate_map (break 1) (doc_chunks opts) fexps)
           (char '}')
-    | Comment (comment_type, n, col, contents, _) -> begin
+    | Comment (comment_type, n, col, contents, trailing) -> begin
         match comment_type with
         | Lexer.Comment_line -> blank n ^^ string "//" ^^ string contents ^^ require_hardline
         | Lexer.Comment_block -> (
@@ -572,7 +908,7 @@ module Make (Config : CONFIG) = struct
                by forcing exp on a newline if the comment contains linebreaks
             *)
             match block_comment_lines col contents with
-            | [l] -> blank n ^^ string "/*" ^^ l ^^ string "*/" ^^ space
+            | [l] -> blank n ^^ string "/*" ^^ l ^^ string "*/"
             | ls -> blank n ^^ group (align (string "/*" ^^ separate hardline ls ^^ string "*/")) ^^ require_hardline
           )
       end
@@ -591,31 +927,29 @@ module Make (Config : CONFIG) = struct
         string "function"
         ^^ (if f.clause then space ^^ string "clause" else empty)
         ^^ space ^^ doc_id f.id
-        ^^ (match f.typq_opt with Some typq -> space ^^ doc_chunks opts typq | None -> empty)
+        ^^ (match f.typq_opt with Some typq -> doc_chunks_rhs opts typq ^^ space | None -> empty)
         ^^ clauses ^^ hardline
     | Val vs ->
-        let doc_binding (target, name) =
-          string target ^^ char ':' ^^ space ^^ char '"' ^^ utf8string name ^^ char '"'
+        let bindings =
+          let doc_binding (target, name) =
+            string target ^^ char ':' ^^ space ^^ char '"' ^^ utf8string name ^^ char '"'
+          in
+          Option.map
+            (fun extern ->
+              space ^^ char '=' ^^ space
+              ^^ string (if extern.pure then "pure" else "impure")
+              ^^ space
+              ^^ surround indent 1 (char '{') (separate_map (char ',' ^^ break 1) doc_binding extern.bindings) (char '}')
+            )
+            vs.extern_opt
+        in
+        let after =
+          (match vs.typq_opt with Some typq -> doc_chunks_rhs opts typq | None -> empty)
+          ^^ group (doc_chunks_rhs opts vs.typ)
         in
         string "val" ^^ space ^^ doc_id vs.id
-        ^^ group
-             ( match vs.extern_opt with
-             | Some extern ->
-                 space ^^ char '=' ^^ space
-                 ^^ string (if extern.pure then "pure" else "impure")
-                 ^^ space
-                 ^^ surround indent 1 (char '{')
-                      (separate_map (char ',' ^^ break 1) doc_binding extern.bindings)
-                      (char '}')
-             | None -> empty
-             )
-        ^^ space ^^ char ':'
-        ^^ group
-             (nest indent
-                ((match vs.typq_opt with Some typq -> space ^^ doc_chunks opts typq | None -> space)
-                ^^ doc_chunks opts vs.typ
-                )
-             )
+        ^^ group (match bindings with Some doc -> doc | None -> empty)
+        ^^ space ^^ char ':' ^^ after
     | Enum e ->
         string "enum" ^^ space ^^ doc_id e.id
         ^^ group
@@ -625,40 +959,44 @@ module Make (Config : CONFIG) = struct
               | None -> empty
               )
              ^^ space ^^ char '=' ^^ space
-             ^^ surround indent 1 (char '{') (separate_map softline (doc_chunks opts) e.members) (char '}')
+             ^^ surround indent 1 (char '{') (separate_map softline (doc_chunks_rhs opts) e.members) (char '}')
              )
     | Pragma (pragma, arg) -> char '$' ^^ string pragma ^^ space ^^ string arg ^^ hardline
     | Block (always_hardline, exps) ->
         let always_hardline =
-          match exps with [x] -> if can_chunks_list_wrap exps then false else always_hardline | _ -> always_hardline
+          match exps with
+          | [x] ->
+              if opt.wrap || opt.toplevel then true
+              else if not (WrapChecker.check_chunks_wrap exps) then false
+              else always_hardline
+          | _ -> always_hardline
         in
         let exps =
           map_last
             (fun no_semi chunks -> doc_block_exp_chunks (opts |> nonatomic |> statement_like) no_semi chunks)
             exps
         in
-        let sep = if always_hardline || List.exists snd exps then hardline else break 1 in
+        let sep = if always_hardline || List.exists snd exps then hardline else space in
         let exps = List.map fst exps in
-        surround_hardline always_hardline indent 1 (char '{') (separate sep exps) (char '}') |> atomic_parens opts
+        surround_hardline ~nogroup:opt.ungroup_block always_hardline indent 1 (char '{') (separate sep exps) (char '}')
+        |> atomic_parens opts
     | Block_binder (binder, x, y) ->
-        if can_hang y then
-          separate space
-            [string (binder_keyword binder); doc_chunks (atomic opts) x; char '='; doc_chunks (nonatomic opts) y]
-        else
-          separate space [string (binder_keyword binder); doc_chunks (atomic opts) x; char '=']
-          ^^ nest 4 (hardline ^^ doc_chunks (nonatomic opts) y)
+        let doc_x = group (separate space [string (binder_keyword binder); doc_chunks (atomic opts) x; char '=']) in
+        let doc_y = doc_chunks_rhs ~opt:(opt |> opt_binary_rhs) (nonatomic opts) y in
+        doc_x ^^ space ^^ doc_y
     | Binder (binder, x, y, z) ->
-        prefix indent 1
-          (separate space
-             [
-               string (binder_keyword binder);
-               doc_chunks (atomic opts) x;
-               char '=';
-               doc_chunks (nonatomic opts) y;
-               string "in";
-             ]
+        let x = doc_chunks (atomic opts) x in
+        let y = doc_chunks_rhs ~opt:(opt |> opt_binary_rhs) (atomic opts) y in
+        let doc =
+          group (separate space [string (binder_keyword binder); x; char '='; group y] ^^ break 1)
+          ^^ separate space [string "in"; hardline]
+        in
+        Queue.fold
+          (fun acc chunk ->
+            let doc = doc_chunk opts chunk in
+            acc ^^ doc
           )
-          (doc_chunks (nonatomic opts) z)
+          doc z
     | Match m ->
         let kw1, kw2 = match_keywords m.kind in
         string kw1 ^^ space
@@ -669,25 +1007,30 @@ module Make (Config : CONFIG) = struct
         |> atomic_parens opts
     | Foreach loop ->
         let to_keyword = string (if loop.decreasing then "downto" else "to") in
-        string "foreach" ^^ space
-        ^^ group
-             (surround indent 0 (char '(')
-                (separate (break 1)
-                   ([
-                      doc_chunks (opts |> atomic) loop.var;
-                      string "from" ^^ space ^^ doc_chunks (opts |> atomic |> expression_like) loop.from_index;
-                      to_keyword ^^ space ^^ doc_chunks (opts |> atomic |> expression_like) loop.to_index;
-                    ]
-                   @
-                   match loop.step with
-                   | Some step -> [string "by" ^^ space ^^ doc_chunks (opts |> atomic |> expression_like) step]
-                   | None -> []
-                   )
-                )
-                (char ')')
-             )
-        ^^ space
-        ^^ group (doc_chunks (opts |> nonatomic |> statement_like) loop.body)
+        let doc =
+          string "foreach" ^^ space
+          ^^ group
+               (surround indent 0 (char '(')
+                  (separate (break 1)
+                     ([
+                        doc_chunks (opts |> atomic) loop.var;
+                        string "from" ^^ space ^^ doc_chunks (opts |> atomic |> expression_like) loop.from_index;
+                        to_keyword ^^ space ^^ doc_chunks (opts |> atomic |> expression_like) loop.to_index;
+                      ]
+                     @
+                     match loop.step with
+                     | Some step -> [string "by" ^^ space ^^ doc_chunks (opts |> atomic |> expression_like) step]
+                     | None -> []
+                     )
+                  )
+                  (char ')')
+               )
+        in
+        Queue.iter (fun c -> match c with Block _ -> Printf.printf "`1\n" | _ -> Printf.printf "0\n") loop.body;
+        let body = doc_chunks_rhs ~opt:(default_opt |> opt_wrap) (opts |> nonatomic |> statement_like) loop.body in
+
+        if is_chunks_block_like loop.body then doc ^^ space ^^ group body
+        else doc ^^ nest indent (hardline ^^ group body)
     | While loop ->
         let measure =
           match loop.termination_measure with
@@ -705,33 +1048,206 @@ module Make (Config : CONFIG) = struct
     | Field (exp, id) -> doc_chunks (subatomic opts) exp ^^ char '.' ^^ doc_id id
     | Raw str -> separate hardline (lines str)
 
+  (*
+    1. nowrap
+      [if cond then x else y]
+
+    2. surround
+      [
+        let a = 1 in
+        a
+      ]
+  *)
+  and doc_chunks_nowrap_or_surround ?(opt = default_opt) opts chunks =
+    let doc = Queue.fold (fun doc chunk -> doc ^^ doc_chunk ~opt opts chunk) empty chunks in
+    let wrap = WrapChecker.check_chunks_wrap [chunks] in
+    if wrap then surround_hardline true indent 1 empty doc empty else doc
+
+  (* format rhs chunks
+     - if_stmt:
+       let a = if cond then x else y
+       let a =
+         if cond then {
+           x
+         } else {
+           y
+         }
+
+     - block like:
+       let a = match|tuple|block {
+         ...
+       }
+
+     - other
+       - nowrap:
+         let a = 1 // comment
+
+       - prefix:
+         let a =
+           let a = 1 in
+           a
+  *)
+  and doc_chunks_head_comments ?(opt = default_opt) opts chunks =
+    let count = ref 0 in
+    let prefix_group = ref false in
+    let q = chunks in
+
+    let rec go q doc =
+      match Queue.peek_opt q with
+      | Some (Comment (comment_type, n, col, contents, trailing)) ->
+          ignore (Queue.pop q);
+          count := !count + 1;
+
+          let this_doc =
+            match comment_type with
+            | Lexer.Comment_line ->
+                let prefix =
+                  if doc = empty then (
+                    prefix_group := true;
+                    hardline
+                  )
+                  else empty
+                in
+                prefix ^^ blank n ^^ string "//" ^^ string contents ^^ require_hardline
+            | Lexer.Comment_block -> (
+                match block_comment_lines col contents with
+                | [l] ->
+                    Printf.printf "You are here~!\n";
+                    let c_doc = blank n ^^ string "/*" ^^ l ^^ string "*/" in
+                    let next = Queue.peek_opt q in
+                    let next_is_comment = match next with Some (Comment _) -> true | _ -> false in
+                    if next_is_comment || !count > 1 || trailing then (
+                      Printf.printf "This is aaa\n";
+                      c_doc ^^ require_hardline
+                    )
+                    else (
+                      Printf.printf "This is go\n";
+                      prefix_group := false;
+                      match next with
+                      | Some (Spacer (spacer_newline, n)) -> (
+                          ignore (Queue.pop q);
+                          match Queue.peek_opt q with
+                          | Some (Comment _) ->
+                              prefix_group := true;
+                              c_doc ^^ require_hardline
+                          | Some (Spacer (true, n)) -> c_doc ^^ require_hardline
+                          | Some _ ->
+                              prefix_group := true;
+                              c_doc ^^ if spacer_newline then require_hardline else space
+                          | None ->
+                              prefix_group := false;
+                              c_doc
+                        )
+                      | Some _ ->
+                          prefix_group := false;
+                          c_doc ^^ space
+                      | _ -> c_doc
+                    )
+                | ls ->
+                    prefix_group := true;
+                    let prefix = if doc = empty then hardline else empty in
+                    prefix ^^ blank n
+                    ^^ group (align (string "/*" ^^ separate hardline ls ^^ string "*/"))
+                    ^^ require_hardline
+              )
+          in
+          go q (doc ^^ this_doc)
+      | Some c ->
+          ignore (Queue.pop q);
+          go q (doc ^^ doc_chunk ~opt opts c) (* doc *)
+      | None -> doc
+    in
+    let doc = go chunks empty in
+    (q, doc, !prefix_group)
+
+  and doc_chunks_rhs ?(opt = default_opt) opts _chunks =
+    let chunks = Queue.create () in
+    Queue.iter (fun c -> Queue.push c chunks) _chunks;
+
+    (* find block *)
+    let block_like, tl = is_chunks_block_like_and chunks in
+
+    (* TODO: how to add space *)
+    List.iter
+      (fun c ->
+        match c with
+        | Spacer _ -> ()
+        | Comment (t, _, _, _, trailing) -> (
+            match t with Lexer.Comment_line -> () | Lexer.Comment_block -> ()
+          )
+        | _ -> ()
+      )
+      tl;
+
+    (* handle trailing comments *)
+    let group_doc = if block_like then fun doc -> doc else group in
+    let nowrap = not (WrapChecker.check_chunks_wrap [chunks]) in
+    Printf.printf "rhs 推断 %s\n" (if nowrap then "不换行" else "换行");
+    let is_chunks_if_then_else_doc = is_chunks_if_then_else chunks in
+
+    (* let doc = ref empty in
+       while Queue.length chunks > 0 do
+         let after_chunks, head_doc, newline = doc_chunks_head_comments ~opt opts chunks in
+         doc := !doc ^^ head_doc;
+         Printf.printf ""
+       done; *)
+    Printf.printf "rhs 处理... \n";
+    let after_chunks, doc, prefix_group = doc_chunks_head_comments ~opt opts chunks in
+    let rtrim_index = find_rtrim_index is_spacer after_chunks in
+    if prefix_group then nest indent doc
+    else (
+      (* let after_doc, _ =
+           Queue.fold
+             (fun (doc, i) chunk ->
+               let res = if i >= rtrim_index then doc else doc ^^ doc_chunk ~opt opts chunk in
+               (res, i + 1)
+             )
+             (empty, 0) after_chunks
+         in
+         let doc = head_doc ^^ after_doc in *)
+      (* test if can nowrap with optional strict mode *)
+      let doc =
+        (* add prefix for multi line chunks if wrap *)
+        if is_chunks_if_then_else_doc then doc
+        else if nowrap || block_like then
+          (fun doc ->
+            Printf.printf "rhs 实际不换行\n";
+            doc
+          )
+            doc
+        else nest indent (group (break 1 ^^ group_doc doc))
+      in
+      doc
+    )
+
   and doc_pexp_chunks_pair opts pexp =
     let pat = doc_chunks opts pexp.pat in
-    let body = doc_chunks opts pexp.body in
+    let body = doc_chunks_rhs ~opt:(default_opt |> opt_ungroup_tuple |> opt_matchcase_rhs) opts pexp.body in
     match pexp.guard with
     | None -> (pat, body)
-    | Some guard -> (separate space [pat; string "if"; doc_chunks opts guard], body)
+    | Some guard -> (separate space [pat; string "if"; doc_chunks opts guard], group body)
 
   and doc_pexp_chunks opts pexp =
     let guarded_pat, body = doc_pexp_chunks_pair opts pexp in
-    separate space [guarded_pat; string "=>"; body]
+    group (separate space [guarded_pat; string "=>"; body])
 
   and doc_funcl return_typ_opt opts (header, pexp) =
+    let args = group (doc_chunks_rhs ~opt:(default_opt |> opt_ungroup_tuple) opts pexp.pat) in
     let return_typ =
       match return_typ_opt with
-      | Some chunks -> space ^^ prefix_parens indent (string "->") (doc_chunks opts chunks) ^^ space
+      | Some chunks -> space ^^ prefix_parens indent (string "->") (doc_chunks_rhs opts chunks) ^^ space
       | None -> space
     in
+    let body_doc = doc_chunks_rhs ~opt:(default_opt |> opt_toplevel |> opt_function_rhs) opts pexp.body in
+    let body_doc = group body_doc in
     doc_chunks opts header
     ^^
     match pexp.guard with
     | None ->
-        (if pexp.funcl_space then space else empty)
-        ^^ group (doc_chunks ~ungroup_tuple:true opts pexp.pat ^^ return_typ)
-        ^^ string "=" ^^ space ^^ doc_chunks opts pexp.body
+        (if pexp.funcl_space then space else empty) ^^ group args ^^ group return_typ ^^ string "=" ^^ space ^^ body_doc
     | Some guard ->
         parens (separate space [doc_chunks opts pexp.pat; string "if"; doc_chunks opts guard])
-        ^^ return_typ ^^ string "=" ^^ space ^^ doc_chunks opts pexp.body
+        ^^ return_typ ^^ string "=" ^^ space ^^ body_doc
 
   (* Format an expression in a block, optionally terminating it with a
      semicolon. If the expression has a trailing comment then we will
@@ -751,14 +1267,27 @@ module Make (Config : CONFIG) = struct
           let doc_acc = ref (doc_acc ^^ doc_chunk opts chunk) in
           let doc_acc =
             match (chunk, Queue.peek_opt chunks) with
+            (* TODO *)
+            | Comment (Lexer.Comment_block, n, col, contents, trailing), _ -> (
+                Printf.printf "Hi\n";
+                match block_comment_lines col contents with
+                | [l] ->
+                    Printf.printf "Hi 1\n";
+                    if trailing then !doc_acc ^^ hardline else !doc_acc ^^ space
+                | ls ->
+                    Printf.printf "Hi 2\n";
+                    !doc_acc
+              )
             | Comment _, _ -> !doc_acc
             | Spacer _, _ -> !doc_acc
-            | _, Some (Comment (_, _, _, _, trailing)) ->
+            | _, Some (Comment (t, _, _, _, trailing)) ->
                 doc_acc := !doc_acc ^^ terminator;
                 (* if current is not a Comment or Spacer, and next is not trailing, then insert a hardline *)
+                (* (match t with Lexer.Comment_block -> if trailing then doc_acc := !doc_acc ^^ hardline | _ -> ()); *)
                 if not trailing then doc_acc := !doc_acc ^^ hardline;
                 doc_acc := !doc_acc ^^ doc_chunk opts (Queue.pop chunks);
-                if Queue.peek_opt chunks = None then requires_hardline := true;
+                if Queue.peek_opt chunks = None && match t with Lexer.Comment_line -> true | _ -> false then
+                  requires_hardline := true;
                 !doc_acc
             | _, None -> !doc_acc ^^ terminator
             | _, _ -> !doc_acc
@@ -769,8 +1298,8 @@ module Make (Config : CONFIG) = struct
     let doc = splice_into_doc chunks empty in
     (group doc, !requires_hardline)
 
-  and doc_chunks ?(ungroup_tuple = false) opts chunks =
-    Queue.fold (fun doc chunk -> doc ^^ doc_chunk ~ungroup_tuple opts chunk) empty chunks
+  and doc_chunks ?(opt = default_opt) opts chunks =
+    Queue.fold (fun doc chunk -> doc ^^ doc_chunk ~opt opts chunk) empty chunks
 
   let to_string doc =
     let b = Buffer.create 1024 in
@@ -854,7 +1383,9 @@ module Make (Config : CONFIG) = struct
   let format_defs_once ?(debug = false) filename source comments defs =
     let chunks = chunk_defs source comments defs in
     if debug then Queue.iter (prerr_chunk "") chunks;
-    let doc = Queue.fold (fun doc chunk -> doc ^^ doc_chunk ~toplevel:true default_opts chunk) empty chunks in
+    let doc =
+      Queue.fold (fun doc chunk -> doc ^^ doc_chunk ~opt:(default_opt |> opt_toplevel) default_opts chunk) empty chunks
+    in
     if debug then (
       let formatted, lb_info = to_string (doc ^^ hardline) in
       let debug_src = fixup ~debug lb_info formatted in

@@ -425,7 +425,14 @@ let rec pop_header_comments comments chunks l lnum =
       | Some (s, _) when e.pos_cnum < s.pos_cnum && comment_s.pos_lnum = lnum ->
           let _ = Stack.pop comments in
           Queue.add
-            (Comment (comment_type, 0, comment_s.pos_cnum - comment_s.pos_bol, contents, e.pos_lnum == lnum))
+            (Comment
+               ( comment_type,
+                 0,
+                 comment_s.pos_cnum - comment_s.pos_bol,
+                 contents,
+                 comment_type = Lexer.Comment_line && e.pos_lnum == lnum
+               )
+            )
             chunks;
           Queue.add (Spacer (true, 1)) chunks;
           pop_header_comments comments chunks l (lnum + 1)
@@ -446,7 +453,12 @@ let rec pop_comments ?(spacer = true) comments chunks l =
           let _ = Stack.pop comments in
           Queue.add
             (Comment
-               (comment_type, 0, comment_s.pos_cnum - comment_s.pos_bol, contents, comment_s.pos_lnum == e.pos_lnum)
+               ( comment_type,
+                 0,
+                 comment_s.pos_cnum - comment_s.pos_bol,
+                 contents,
+                 comment_type = Lexer.Comment_line && comment_s.pos_lnum == e.pos_lnum
+               )
             )
             chunks;
           if spacer && comment_e.pos_lnum < s.pos_lnum then Queue.add (Spacer (true, 1)) chunks;
@@ -463,7 +475,12 @@ let rec pop_comments_until_loc_end comments chunks l =
           let _ = Stack.pop comments in
           Queue.add
             (Comment
-               (comment_type, 0, comment_s.pos_cnum - comment_s.pos_bol, contents, comment_s.pos_lnum == e.pos_lnum)
+               ( comment_type,
+                 0,
+                 comment_s.pos_cnum - comment_s.pos_bol,
+                 contents,
+                 comment_type = Lexer.Comment_line && comment_s.pos_lnum == e.pos_lnum
+               )
             )
             chunks;
           pop_comments_until_loc_end comments chunks l
@@ -909,8 +926,11 @@ let rec chunk_exp comments chunks (E_aux (aux, l)) =
             end;
 
             let next_line_num = Option.bind next (fun bexp -> block_exp_locs bexp |> fst |> starting_line_num) in
-            if have_linebreak (ending_line_num e_l) next_line_num || Option.is_none next then
-              ignore (pop_trailing_comment comments chunks (ending_line_num e_l));
+            if have_linebreak (ending_line_num e_l) next_line_num || Option.is_none next then (
+              Printf.printf "";
+              (* Printf.printf "处理尾随注释\n"; *)
+              ignore (pop_trailing_comment comments chunks (ending_line_num e_l))
+            );
             begin
               match next with
               | Some next ->
@@ -924,6 +944,7 @@ let rec chunk_exp comments chunks (E_aux (aux, l)) =
       in
       Queue.add (Block (true, block_chunks)) chunks
   | (E_let (LB_aux (LB_val (pat, exp), _), body) | E_internal_plet (pat, exp, body)) as binder ->
+      (* there need a way to find position of '=' *)
       let binder =
         match binder with
         | E_let _ -> Let_binder
@@ -959,6 +980,14 @@ let rec chunk_exp comments chunks (E_aux (aux, l)) =
       let i_chunks = rec_chunk_exp i in
       pop_comments ~spacer:false comments i_chunks keywords.then_loc;
       let t_chunks = rec_chunk_exp t in
+      if if_format.then_brace then ignore (pop_comments_until_loc_end comments t_chunks keywords.then_loc);
+      (*
+        no place to put comment between then_end and else_start
+          
+          if foo 
+          then {} /* comment */ 
+          else {} 
+      *)
       ignore (pop_trailing_comment comments t_chunks (ending_line_num keywords.then_loc));
       (match keywords.else_loc with Some l -> pop_comments comments t_chunks l | None -> ());
       let e_chunks = rec_chunk_exp e in
@@ -1095,6 +1124,7 @@ and chunk_pexp ?delim comments chunks (Pat_aux (aux, l)) =
       Queue.add (Spacer (false, 1)) chunks;
       chunk_pexp ?delim comments chunks pexp
   | Pat_exp (pat, exp) ->
+      (* | P_aux (P_lit (L_aux (L_unit, _)), _) *)
       let funcl_space = match pat with P_aux (P_tuple _, _) -> false | _ -> true in
       let pat_chunks = Queue.create () in
       chunk_pat comments pat_chunks pat;
