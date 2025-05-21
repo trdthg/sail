@@ -1,0 +1,24 @@
+struct TLB_Entry = {
+  asid       : asidbits,           // comment
+  global     : bool,               // comment
+  vpn        : bits(tlb_vpn_bits), // comment
+  levelMask  : bits(tlb_vpn_bits), // comment
+  ppn        : bits(tlb_ppn_bits), // comment
+  pte        : bits(64),           // comment
+  pteAddr    : physaddr,           // comment
+}
+
+struct TLB_Entry = {
+  asid     : asidbits,           // comment
+  global      : bool,               // comment
+  vpn          : bits(tlb_vpn_bits), // comment
+  levelMask  : bits(tlb_vpn_bits),
+  ppn    : bits(tlb_ppn_bits),         /* comment */
+  /* comment */
+  pte        : bits(64),           // comment
+  pte2        : bits(64),           // comment
+  /* comment
+        */
+  pteAddr    : physaddr,
+  pteAddr2    : physaddr,
+}
