@@ -1174,17 +1174,17 @@ and string_of_typ = function Typ_aux (typ, _) -> string_of_typ_aux typ
 
 and string_of_typ_aux = function
   | Typ_internal_unknown -> "<UNKNOWN TYPE>"
-  | Typ_id id -> string_of_id id
-  | Typ_var kid -> string_of_kid kid
-  | Typ_tuple typs -> "(" ^ string_of_list ", " string_of_typ typs ^ ")"
+  | Typ_id id -> "Typ_id " ^ string_of_id id
+  | Typ_var kid -> "Typ_var " ^ string_of_kid kid
+  | Typ_tuple typs -> "Typ_tuple (" ^ string_of_list ", " string_of_typ typs ^ ")"
   | Typ_app (id, args) when Id.compare id (mk_id "atom") = 0 ->
-      "int(" ^ string_of_list ", " string_of_typ_arg args ^ ")"
+      "Typ_app_atom int(" ^ string_of_list ", " string_of_typ_arg args ^ ")"
   | Typ_app (id, args) when Id.compare id (mk_id "atom_bool") = 0 ->
-      "bool(" ^ string_of_list ", " string_of_typ_arg args ^ ")"
-  | Typ_app (id, []) -> string_of_id id
-  | Typ_app (id, args) -> string_of_id id ^ "(" ^ string_of_list ", " string_of_typ_arg args ^ ")"
+      "Typ_app_atom_bool bool(" ^ string_of_list ", " string_of_typ_arg args ^ ")"
+  | Typ_app (id, []) -> "Typ_app_no_arg " ^ string_of_id id
+  | Typ_app (id, args) -> string_of_id id ^ "Typ_app_wild_app (" ^ (string_of_list ", " string_of_typ_arg args) ^ ")"
   | Typ_fn ([typ_arg], typ_ret) -> string_of_typ typ_arg ^ " -> " ^ string_of_typ typ_ret
-  | Typ_fn (typ_args, typ_ret) -> "(" ^ string_of_list ", " string_of_typ typ_args ^ ") -> " ^ string_of_typ typ_ret
+  | Typ_fn (typ_args, typ_ret) -> "Typ_fn (" ^ string_of_list ", " string_of_typ typ_args ^ ") -> " ^ string_of_typ typ_ret
   | Typ_bidir (typ1, typ2) -> string_of_typ typ1 ^ " <-> " ^ string_of_typ typ2
   | Typ_exist (kids, nc, typ) ->
       "{"

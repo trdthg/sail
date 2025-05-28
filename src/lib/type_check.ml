@@ -1412,11 +1412,17 @@ type destructed_vector = Destruct_vector of nexp * typ | Destruct_bitvector of n
 
 let destruct_any_vector_typ l env typ =
   let destruct_any_vector_typ' l = function
-    | Typ_aux (Typ_app (id, [A_aux (A_nexp n1, _)]), _) when string_of_id id = "bitvector" -> Destruct_bitvector n1
+    | Typ_aux (Typ_app (id, [A_aux (A_nexp n1, _)]), _) when string_of_id id = "bitvector" ->
+        Printf.printf "还没有!\n";
+        Destruct_bitvector n1
     | Typ_aux (Typ_app (id, [A_aux (A_nexp n1, _); A_aux (A_typ vtyp, _)]), _) when string_of_id id = "vector" ->
+        Printf.printf "还没有!\n";
         Destruct_vector (n1, vtyp)
-    | typ -> typ_error l ("Expected vector or bitvector type, got " ^ string_of_typ typ)
+    | typ ->
+        Printf.printf "已经结束嘞!)\n";
+        typ_error l ("Expected vector or bitvector type, got " ^ string_of_typ typ)
   in
+  Printf.printf "到此为止了吧? %s %s (\n" (string_of_typ typ) (simple_string_of_loc l);
   destruct_any_vector_typ' l (Env.expand_synonyms env typ)
 
 let destruct_vector_typ l env typ =
@@ -2445,6 +2451,7 @@ let rec check_exp env (E_aux (exp_aux, (l, uannot)) as exp : uannot exp) (Typ_au
         match destruct_exist_plain typ with Some (tyvars, nc, typ) -> (tyvars, nc, typ) | None -> ([], nc_true, typ)
       in
       let len, elem_typ, is_generic =
+        Printf.printf "可能 1\n";
         match destruct_any_vector_typ l env typ with
         | Destruct_vector (len, elem_typ) -> (len, elem_typ, true)
         | Destruct_bitvector len -> (len, bit_typ, false)
@@ -3055,6 +3062,7 @@ and bind_vector_concat_generic :
   (* Try to infer a constant length, and the element type if non-bitvector *)
   let typ_opt =
     Option.bind typ_opt (fun typ ->
+        Printf.printf "可能 2\n";
         match destruct_any_vector_typ l env typ with
         | Destruct_vector (len, elem_typ) -> Option.map (fun len -> (len, Some elem_typ)) (solve_unique env len)
         | Destruct_bitvector len -> Option.map (fun len -> (len, None)) (solve_unique env len)
@@ -3100,6 +3108,7 @@ and bind_vector_concat_generic :
       | None -> (
           match List.find_opt vector_concat_elem_is_ok inferred_pats with
           | Some (VC_elem_ok pat) -> begin
+              Printf.printf "可能 3\n";
               match destruct_any_vector_typ l env (funcs.typ_of pat) with
               | Destruct_vector (_, t) -> Some t
               | Destruct_bitvector _ -> None

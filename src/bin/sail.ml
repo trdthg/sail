@@ -550,6 +550,7 @@ let run_sail (config : Yojson.Safe.t option) tgt =
   Target.run_pre_rewrites_hook tgt ast effect_info env;
   let ctx, ast, effect_info, env = Rewrites.rewrite ctx effect_info env (Target.rewrites tgt) ast in
 
+  (* if !opt_ddump_rewrite_ast *)
   Target.action tgt !opt_file_out { ctx; ast; effect_info; env; default_sail_dir = Locations.sail_dir; config };
 
   (ctx, ast, env, effect_info)
